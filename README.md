@@ -11,7 +11,7 @@ Intre Smart Home Control Integration is an integrated component of Home Assistan
 > - Core $\geq$ 2024.4.4
 > - Operating System $\geq$ 13.0
 
-### Method 1: Git clone from GitHub
+### Git clone from GitHub
 
 ```bash
 cd config
