@@ -773,6 +773,7 @@ class IntrepsClient(ABC):
             interval = self.__get_next_reconnect_time()
             self.log_error(
                 'intreps try reconnect after %sms', interval)
+        _LOGGER.debug('try conneent mqtt')
         self._intreps_reconnect_timer = self.mev_set_timeout(
             interval, self.__intreps_connect, None)
 
@@ -806,6 +807,7 @@ class IntrepsClient(ABC):
 
     def __intreps_connect(self, ctx: Any = None) -> None:
         result = MQTT_ERR_UNKNOWN
+        _LOGGER.debug("__intreps_connect")
         if self._intreps_reconnect_timer:
             self.mev_clear_timeout(self._intreps_reconnect_timer)
             self._intreps_reconnect_timer = None
@@ -818,6 +820,7 @@ class IntrepsClient(ABC):
                 self.mev_set_read_handler(self._mqtt_fd, None, None)
                 self.mev_set_write_handler(self._mqtt_fd, None, None)
                 self._mqtt_fd = -1
+            _LOGGER.debug("__intreps_connect 22 %s %s",self._host,self._port)
             result = self._mqtt.connect(
                 host=self._host, port=self._port,
                 clean_start=True, keepalive=INTREHOME_MQTT_KEEPALIVE)

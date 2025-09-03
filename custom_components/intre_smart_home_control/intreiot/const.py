@@ -61,7 +61,7 @@ OAUTH2_AUTH_URL: str = 'https://account.Intretech.com/oauth2/authorize'
 DEFAULT_OAUTH2_API_HOST: str = 'ha.api.io.mi.com'
 
 INTRE_HA_PRODUCT_KEY="Intre.BGZ001"
-INTRE_PHYSICAL_MODEL_CONTROL_VERSION:int = 3
+INTRE_PHYSICAL_MODEL_CONTROL_VERSION:int = 2
 
 #MQTT_ToH ='test/'
 #INTRE_SECURE_KEY ="123456"

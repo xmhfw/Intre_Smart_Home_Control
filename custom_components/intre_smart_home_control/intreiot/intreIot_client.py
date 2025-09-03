@@ -215,6 +215,7 @@ class IntreIoTClient:
 
         # 7. 最后一步：建立MQTT连接（确保遗嘱已设置）
         try:
+            _LOGGER.debug("MQTT连接ing...")
             await self._mqtt_cloud.intreps_connect_async()
             _LOGGER.debug("MQTT连接成功,遗嘱消息已被服务器记录")
         except Exception as e:
