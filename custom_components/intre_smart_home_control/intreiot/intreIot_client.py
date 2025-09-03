@@ -457,4 +457,7 @@ class IntreIoTClient:
     
     async def prop_service_set_reply_async(self,productkey:str,deviceid:str,msgid:str,code:str)->None:
         await self._mqtt_cloud.prop_service_set_reply_async(productkey=productkey,deviceid=deviceid,msgid=msgid,code=code)
+
+    async def service_set_reply_async(self,productkey:str,deviceid:str,moduleKey:str,serviceKey: str,msgid:str,code:str)->None:
+        await self._mqtt_cloud.service_set_reply_async(token=self._http_client.token,productkey=productkey,deviceid=deviceid,moduleKey=moduleKey,serviceKey=serviceKey,msgid=msgid,code=code)
     

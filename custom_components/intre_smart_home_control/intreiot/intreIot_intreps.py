@@ -70,7 +70,8 @@ from .mqttMsgdef import (
     MQTT_DEVICE_DOWN_TLS_LOG_REPORT,
     MQTT_DEVICE_TLS_LOG_REPORT,
     MQTT_BATCH_MODULE_PROP_REPORT,
-    MQTT_BATCH_PROPERTY_SERVICE_REPLY)
+    MQTT_BATCH_PROPERTY_SERVICE_REPLY,
+    MQTT_SERVER_SET_REPLY)
 from paho.mqtt.client import (
     MQTT_ERR_SUCCESS,
     MQTT_ERR_UNKNOWN,
@@ -676,7 +677,7 @@ class IntrepsClient(ABC):
                 certfile=self._cert_file,
                 keyfile=self._key_file)
         else:
-            self._mqtt.tls_set(ca_certs='/config/custom_components/IntreHomeControl/intreiot/ca/service2.pem',tls_version=ssl.PROTOCOL_TLS_CLIENT)
+            self._mqtt.tls_set(ca_certs='/config/custom_components/intre_smart_home_control/intreiot/ca/release.pem',tls_version=ssl.PROTOCOL_TLS_CLIENT)
         self._mqtt.tls_insecure_set(True)
         self._mqtt.on_connect = self.__on_connect
         self._mqtt.on_connect_fail = self.__on_connect_failed
@@ -953,7 +954,7 @@ class IntrepsCloudClient(IntrepsClient):
                 return
             if handler:
                 self.log_error('on properties_changed, %s', payload)
-                handler(data=msg['data'])
+                handler(data=msg)
         return self.__reg_broadcast(
             topic=topic, handler=sub_callback, handler_ctx=handler_ctx)
 
@@ -1165,13 +1166,21 @@ class IntrepsCloudClient(IntrepsClient):
             payload=json.dumps(mqttmsg['payload']),
             timeout_ms=10000)
     
-    @final
+    @final  
     async def prop_service_set_reply_async(self, token,productkey:str,deviceid: str,msgid:str,code:str) -> dict:
         mqttmsg=MQTT_BATCH_PROPERTY_SERVICE_REPLY(token=token,productkey=productkey,deviceid=deviceid,msgid=msgid,code=code)
         result_obj = await self.__request_async(
             topic=mqttmsg['topic'],
             payload=json.dumps(mqttmsg['payload']),
-            timeout_ms=10000)
+            timeout_ms=10000)   
+            
+    @final
+    async def service_set_reply_async(self, token,productkey:str,deviceid: str,moduleKey: str,serviceKey: str,msgid:str,code:str) -> dict:
+        mqttmsg=MQTT_SERVER_SET_REPLY(token=token,productkey=productkey,deviceid=deviceid,moduleKey=moduleKey,serviceKey=serviceKey,msgid=msgid,code=code)
+        result_obj = await self.__request_async(
+            topic=mqttmsg['topic'],
+            payload=json.dumps(mqttmsg['payload']),
+            timeout_ms=10000)     
             
     @final
     def __on_intreps_cmd_handler(self, intreps_cmd: IntrepsCmd) -> None:

@@ -66,6 +66,9 @@ from .const import (
     INTRE_SECURE_KEY,
     OAUTH2_AUTH_URL)
 from .intreIot_error import IntreIoTErrorCode, IntreIoTHttpError, IntreIoTOauthError
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+import aiohttp
+
 # pylint: disable=relative-beyond-top-level
 
 _LOGGER = logging.getLogger(__name__)
@@ -148,21 +151,70 @@ class IntreIotHttpClient:
         res_str = await http_res.text()
         res_obj: dict = json.loads(res_str)
         return res_obj
+    
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        # 重点：在这里添加DNS错误和连接错误的捕获
+        retry=retry_if_exception_type((
+            TimeoutError,
+            aiohttp.ClientConnectionError,
+            asyncio.TimeoutError,
+            ConnectionError,
+            aiohttp.ClientConnectorError,  # 新增：捕获连接错误（包含DNS问题）
+        )),
+        reraise=True
+    )
 
     async def __intrehome_api_post_async(
-        self, url_path: str, header:dict,data: dict,
-        timeout: int = INTREHOME_HTTP_API_TIMEOUT
-    ) -> dict:
+            self, url_path: str, header: dict, data: dict,
+            timeout: int = INTREHOME_HTTP_API_TIMEOUT
+        ) -> dict:
         
-        http_res = await self._session.post(
-            url=f'{self._base_url}{url_path}',
-            json=data,
-            headers=header,
-            timeout=timeout)
+        # 拼接完整URL用于日志和错误信息
+        url = f'{self._base_url}{url_path}'
+        
+        try:
+            http_res = await self._session.post(
+                url=url,
+                json=data,
+                headers=header,
+                timeout=timeout
+            )
+            
+            http_res.raise_for_status()
+            res_str = await http_res.text()
+            res_obj: dict = json.loads(res_str)
+            return res_obj
+            
+        # 重点：在这里添加ClientConnectorError的区分处理
+        except aiohttp.ClientConnectorError as e:
+            error_msg = str(e)
+            if any(keyword in error_msg for keyword in ["DNS", "Timeout while contacting DNS servers"]):
+                _LOGGER.debug(f"DNS resolution failed for {url}: {error_msg}")
+            else:
+                _LOGGER.debug(f"Failed to connect to {url}: {error_msg}")
+            # 不抛异常，返回None或自定义错误字典
+            return None  # 或 return {"error": "connection_failed", "message": error_msg}
 
-        res_str = await http_res.text()
-        res_obj: dict = json.loads(res_str)
-        return res_obj
+        # 处理HTTP响应错误（4xx/5xx状态码）
+        except aiohttp.ClientResponseError as e:
+            if 400 <= e.status < 500 and e.status != 429:
+                _LOGGER.debug(f"Client error {e.status} for URL {url}")
+            else:
+                _LOGGER.debug(f"Server error {e.status} for URL {url}, will retry")
+            return None  # 或根据状态码返回不同标识
+
+        # 处理JSON解析错误
+        except json.JSONDecodeError as e:
+            _LOGGER.debug(f"Failed to parse JSON from {url}: {str(e)}")
+            return None
+
+        # 捕获其他所有异常
+        except Exception as e:
+            _LOGGER.debug(f"Request failed for {url}: {str(e)}, will retry")
+            return None
+
     
     async def getToken(self,devicesn:str)-> None:
         rsp = await self.__intrehome_api_post_async(
@@ -270,7 +322,8 @@ class IntreIotHttpClient:
             header=self.__api_request_headers(data=product_info),
             data=product_info
         )
-        #_LOGGER.debug(json.dumps(rsp))
+        _LOGGER.debug('add_sub_device1111111111111111111111111111')
+        _LOGGER.debug(json.dumps(rsp))
         if rsp['code'] == 1:
             return rsp['data']
         return None            
@@ -281,7 +334,8 @@ class IntreIotHttpClient:
             header=self.__api_request_headers(data=dynamic_info),
             data=dynamic_info
         )
-        #_LOGGER.debug(json.dumps(rsp))
+        _LOGGER.debug('add_dynamic_module1111111111111111111111111111')
+        _LOGGER.debug(json.dumps(rsp))
         if rsp['code'] == 1:
             return rsp['data']
         return None 
