@@ -243,7 +243,35 @@ def MQTT_BATCH_PROPERTY_SERVICE_REPLY(token:str,productkey:str,deviceid:str,msgi
             "timestamp": timestamp_ms,
             "data": {}
         }
+    }  
+
+def MQTT_SERVER_SET_REPLY(token,productkey:str,deviceid:str,moduleKey:str,serviceKey:str,msgid:str,code:str):
+    timestamp_ms = str(int(time.time() * 1000))
+    mqtt_message = {
+        "topic":'device/'+productkey+'/'+deviceid+'/up/tls/service/call-reply',
+        "payload": {
+            "token": token,
+            "msgId": msgid,
+            "timestamp": timestamp_ms,    
+            "sign":__calculate_checksum(MQTT_ToH+'device/'+productkey+'/'+deviceid+'/up/tls/service/call-reply',timestamp_ms,msgid,token),
+            "code": code,
+            "msg": "1",
+            "data": {
+                "module": {
+                    "moduleKey": moduleKey,
+                    "service": {
+                        "serviceKey": serviceKey,
+                        "serviceOutputValue": ""
+                    }
+                }
+            }
+        }
     }
+    # 打印MQTT消息（格式化输出）
+    _LOGGER.debug(f"生成的MQTT属性上报消息:")
+    _LOGGER.debug(json.dumps(mqtt_message, indent=2))
+    
+    return mqtt_message
 
 def MQTT_ONLINE_REPORT(token:str,productkey:str,deviceid:str,onlinestatus:int):
     timestamp_ms = str(int(time.time() * 1000))

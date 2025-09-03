@@ -56,6 +56,8 @@ class IntreCover(IntreIoTModule):
     _intre_ss:IntreManagementEngine
     _positionPercentage:str
     _service_close_cover:int
+    _finally_complementary_value:int
+    _server_open_close_toggle:str
     def __init__(self,intre_ss:IntreManagementEngine,product:IntreIoTProduct,module_info:dict) -> None:
         super().__init__(module_info=module_info)
         _LOGGER.debug('Initializing IntreCover...')
@@ -64,12 +66,20 @@ class IntreCover(IntreIoTModule):
         self.state = None
         self.attributes = dict
         self._service_close_cover = 0
-        self._positionPercentage = StateUtils.util_get_state_positionPercentage(intre_ss._intre_ha.get_entity_state(self._entity_id))
+        self._positionPercentage = 100 - StateUtils.util_get_state_positionPercentage(intre_ss._intre_ha.get_entity_state(self._entity_id))
         self._intre_ss.sub_entity(self._entity_id,self._entity_state_notify)
         self._product.sub_prop_set(self._module_key,self.attr_change_req)
         self._product.sub_service_call(self._module_key,self.service_call_req)
         self._product.sub_bacth_service_prop_call(self._module_key,self.batch_service_prop_call_req)
+        self._finally_complementary_value = self._positionPercentage
         _LOGGER.debug(self._positionPercentage)
+        # 根据行程位置设置self._server_open_close_toggle 
+        if self._positionPercentage == 100:
+            self._server_open_close_toggle = 'open'
+        elif self._positionPercentage == 0:
+            self._server_open_close_toggle = 'close'
+        else:
+            self._server_open_close_toggle = 'open'
 
     @final
     def get_module_prop_json(self)->dict:
@@ -102,12 +112,15 @@ class IntreCover(IntreIoTModule):
     def get_module_json(self)->dict:
         timestamp_ms = str(int(time.time() * 1000))
         match = re.search(r'_(\d+)$', self._module_key)
+        instance_module_name = f"卷帘1"
+        '''
         if match:
             index = match.group(1)
             instance_module_name = f"卷帘1"
         else:
             # 匹配失败时使用默认名称
             instance_module_name = "未知设备"
+        '''
         return {
             "templateModuleKey":'liftCurtain_2',
             "instanceModuleKey": self._module_key,
@@ -121,17 +134,15 @@ class IntreCover(IntreIoTModule):
             ]
         } 
     async def _entity_state_notify(self,newstate)->None:
-         #_LOGGER.debug(f"窗帘新状态: {newstate.state,newstate.entity_id,newstate.attributes['current_position']}")   
-         #await self._intre_ss.report_prop_async(self._product.productKey,self._product.deviceId,self._module_key,'positionPercentage',newstate.attributes['current_position'])
+
+        #_LOGGER.debug(f"窗帘新状态: {newstate.state,newstate.entity_id,newstate.attributes['current_position']}")   
+        #await self._intre_ss.report_prop_async(self._product.productKey,self._product.deviceId,self._module_key,'positionPercentage',newstate.attributes['current_position'])
         #supported_features = attributes.get('supported_features', 'N/A')
         #_LOGGER.debug(f"Supported features for : {supported_features}")
-
-
-        self._positionPercentage=StateUtils.util_get_state_positionPercentage(newstate)
-        _LOGGER.debug(
-            f"Curtain Current state: {newstate.state}, Entity ID: {newstate.entity_id}, "
-            f"Current_position= : {self._positionPercentage},service_close_cover= : {self._service_close_cover}"
-        )
+        # 先检查 newstate 是否为 None
+        if newstate is None:
+            _LOGGER.debug("Received None as newstate in _entity_state_notify")
+            return
 
 
         if 'current_position' not in newstate.attributes:
@@ -139,7 +150,10 @@ class IntreCover(IntreIoTModule):
         else:
             current_position= newstate.attributes['current_position']
             current_position_int = int(current_position)
-
+            _LOGGER.debug(
+                f"Curtain Current state: {newstate.state}, Entity ID: {newstate.entity_id}, "
+                f"Current_position= : {current_position},service_close_cover= : {self._service_close_cover}"
+            )
             complementary_value = 100 - current_position_int
             if not isinstance(current_position, (int, float)):
                 _LOGGER.debug("current_position value is not a number.")
@@ -151,102 +165,146 @@ class IntreCover(IntreIoTModule):
                 # 可选：确保值不会小于0（双重保险）
                 if self._service_close_cover < 0:
                     self._service_close_cover = 0
-            else:
-                await self._intre_ss.report_prop_async(
-                    self._product.productKey,
-                    self._product.deviceId,
-                    self._module_key,
-                    'positionPercentage',
-                    complementary_value
+            else: 
+                _LOGGER.debug(
+                    f"self._finally_complementary_value= : {self._finally_complementary_value}"
                 )
-            
+                if  self._finally_complementary_value != complementary_value:
+                    self._finally_complementary_value = complementary_value
+
+                    if current_position == 100:
+                        self._server_open_close_toggle = 'close'
+                    elif current_position == 0:
+                        self._server_open_close_toggle = 'open'
+                    else:
+                        self._server_open_close_toggle = 'open' 
+                    await self._intre_ss.report_prop_async(
+                        self._product.productKey,
+                        self._product.deviceId,
+                        self._module_key,
+                        'positionPercentage',
+                        complementary_value
+                    )
+                    _LOGGER.debug(
+                        f"self._server_open_close_toggle= : {self._server_open_close_toggle}"
+                    )     
         return   
-             
-    def service_call_req(self, service_call_data: list) -> None:
-        data = {
-            'entity_id': self._entity_id
-        }
-        
+    def service_call_req(self, service_call_data: dict) -> None:
+        data = {'entity_id': self._entity_id}
         service_mapping = {
             'close': 'close_cover',
             'open': 'open_cover',
-            'pause': 'stop_cover'
+            'pause': 'stop_cover'  # 映射到HA标准的"停止"服务
         }
-        
-        try:
-            service_key = service_call_data['module']['service']['serviceKey']
-            _LOGGER.debug(f"service_call_data: {service_call_data}") 
-            
-            if service_key not in service_mapping:
-                _LOGGER.debug(f'Unsupported serviceKey: {service_key}')
-                return
-                
-            service = service_mapping[service_key]
-            
-            # Handle services that need TSL log reporting
-            if service_key in ['open', 'close']:
-                try:
-                    # Check if we're already in an event loop
-                    try:
-                        loop = asyncio.get_event_loop()
-                    except RuntimeError:
-                        # No event loop exists, create a new one
-                        loop = asyncio.new_event_loop()
-                        asyncio.set_event_loop(loop)
-                        run_new_loop = True
-                    else:
-                        run_new_loop = False
 
-                    # Check if loop is running
-                    if loop.is_running():
-                        # If loop is running, use create_task instead
-                        loop.create_task(
-                            self._intre_ss.report_device_tsl_log_async(
-                                self._product.productKey,
-                                self._product.deviceId,
-                                self.get_tls_log_json(service_key)
-                            )
-                        )
-                    else:
-                        # Run the coroutine normally
-                        loop.run_until_complete(
-                            self._intre_ss.report_device_tsl_log_async(
-                                self._product.productKey,
-                                self._product.deviceId,
-                                self.get_tls_log_json(service_key)
-                            )
-                        )
-                        # Close the loop if we created it
-                        if run_new_loop:
-                            loop.close()
-                    
-                except Exception as e:
-                    _LOGGER.error(f"Error reporting TSL log: {str(e)}")
-            
-            # Call the HA service
-            self._intre_ss.call_ha_service('cover', service, data)
-            self._service_close_cover = 3
+        try:
+            # 提取关键参数（从日志结构匹配）
+            msg_id = service_call_data.get('msgId')
+            data_layer = service_call_data.get('data', {})
+            module_data = data_layer.get('module', {})
+            service_data = module_data.get('service', {})
+            service_key = service_data.get('serviceKey')
+
+            _LOGGER.debug(
+                f"处理服务调用: msgId={msg_id}, service_key={service_key}, "
+                f"目标实体={self._entity_id}"
+            )
+
+            if not service_key:
+                _LOGGER.warning("service_call_data中未找到serviceKey")
+                return
+
+            # 处理toggle逻辑（单独处理，不依赖mapping）
+            if service_key == 'toggle':
+                _LOGGER.debug(f"当前toggle状态: {self._server_open_close_toggle}")
+                # 根据当前状态切换服务
+                target_service = 'close_cover' if self._server_open_close_toggle == 'open' else 'open_cover'
+                new_toggle_state = 'close' if self._server_open_close_toggle == 'open' else 'open'
+                
+                # 更新状态并调用服务
+                self._server_open_close_toggle = new_toggle_state
+                self._intre_ss.call_ha_service('cover', target_service, data)
+                _LOGGER.debug(f"执行toggle，调用服务: {target_service}")
+                return  # 避免后续重复处理
+
+            # 处理mapping中的服务（open/close/pause）
+            if service_key not in service_mapping:
+                _LOGGER.warning(f"不支持的serviceKey: {service_key}")
+                return
+
+            # 获取映射后的HA标准服务
+            ha_service = service_mapping[service_key]
+
+            # 处理TSL日志上报和回复（异步操作）
+            try:
+                # 准备异步任务（使用HA的事件循环，避免手动创建）
+                coroutines = [
+                    self._intre_ss.report_device_tsl_log_async(
+                        self._product.productKey,
+                        self._product.deviceId,
+                        self.get_tls_log_json(service_key)
+                    ),
+                    self._intre_ss.service_set_reply_async(
+                        self._product.productKey,
+                        self._product.deviceId,
+                        self._module_key,
+                        service_key,
+                        msg_id,
+                        '1'
+                    )
+                ]
+
+                # 使用Home Assistant的事件循环（关键优化）
+                # 避免手动创建/关闭循环，防止与HA主循环冲突
+                loop = self._intre_ss.hass.loop  # 假设_intre_ss持有hass实例
+                for coro in coroutines:
+                    loop.create_task(coro)  # 加入HA的循环，自动处理
+
+            except Exception as e:
+                _LOGGER.error(f"TSL日志上报失败: {str(e)}", exc_info=True)
+
+            # 调用HA标准服务（核心操作）
+            try:
+                self._intre_ss.call_ha_service('cover', ha_service, data)
+                _LOGGER.debug(f"成功调用HA服务: cover.{ha_service}, 实体: {self._entity_id}")
+                
+                # 记录自定义状态（添加注释说明用途）
+                if service_key != 'pause':
+                    self._service_close_cover = 2  # 示例：标记为"已执行开关操作"
+            except HomeAssistantError as e:
+                # 捕获服务调用失败（如实体不支持服务）
+                _LOGGER.error(
+                    f"调用服务失败: cover.{ha_service} 实体 {self._entity_id} 不支持该服务。错误: {str(e)}"
+                )
+
         except KeyError as e:
-            _LOGGER.error(f"Missing key in service_call_data: {str(e)}")
+            _LOGGER.error(f"service_call_data缺少关键参数: {str(e)}", exc_info=True)
         except Exception as e:
-            _LOGGER.error(f"Error in service_call_req: {str(e)}")
+            _LOGGER.error(f"service_call_req执行出错: {str(e)}", exc_info=True) 
 
     def batch_service_prop_call_req(self,batch_service_prop_data:dict)->None:
         data={
             'entity_id':self._entity_id
         }
+        _LOGGER.debug(f"batch_service_prop_data: {batch_service_prop_data}")
         for prop in batch_service_prop_data['propertyList']:
             if prop['propertyKey']=='positionPercentage':
-                data['position'] = prop['propertyValue']
-                _LOGGER.debug("batch1_service=%s ",data)  
-                self._intre_ss.call_ha_service('cover', 'set_cover_position', data)
+                position = int(prop['propertyValue'])  
+                if 0 <= position <= 100: 
+                    data['position'] = 100 - position
+                    _LOGGER.debug("Setting cover position to %d", position)
+                    self._service_close_cover = 1
+                    self._intre_ss.call_ha_service('cover', 'set_cover_position', data)  
+                    _LOGGER.debug("batch1_service=%s ",data)  
         
         for service in batch_service_prop_data['serviceList']:
             if service['serviceKey']=='close':
+                self._server_open_close_toggle = 'open'
                 service='close_cover'
                 self._intre_ss.call_ha_service('cover',service,data)
                 _LOGGER.debug("batch2_service=%s %s",service,data)  
             elif service['serviceKey']=='open':
+                self._server_open_close_toggle = 'close'
                 service='open_cover'
                 self._intre_ss.call_ha_service('cover',service,data)
                 _LOGGER.debug("batch2_service=%s %s",service,data) 

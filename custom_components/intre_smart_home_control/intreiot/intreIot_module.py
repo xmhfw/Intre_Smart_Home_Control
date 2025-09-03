@@ -215,7 +215,15 @@ class IntreIoTProduct:
         modules_json=[]
         for module in self._modules:
             modules_json.append(module.get_module_json())
-    
+            if self._productKey == "Intre.HA-Light":
+                self._productVersion = 9
+                _LOGGER.debug(f"准备上报属性: productkey={self._productKey} ")
+            elif self._productKey == "Intre.HA-Switch":
+                self._productVersion = 8
+                _LOGGER.debug(f"准备上报属性: productkey={self._productKey} ")
+            elif self._productKey == "Intre.HA-Curtain":
+                self._productVersion = 9
+                _LOGGER.debug(f"准备上报属性: productkey={self._productKey} ")   
         return{
             "productKey": self._productKey,
             "deviceSn": self._deviceSn,
@@ -242,14 +250,14 @@ class IntreIoTProduct:
         for module in self._modules:
             modules_json.append(module.get_module_json())
             if self._productKey == "Intre.HA-Light":
-                self._productVersion = 5
+                self._productVersion = 9
                 _LOGGER.debug(f"准备上报属性: productkey={self._productKey} ")
             elif self._productKey == "Intre.HA-Switch":
-                self._productVersion = 4
+                self._productVersion = 8
                 _LOGGER.debug(f"准备上报属性: productkey={self._productKey} ")
             elif self._productKey == "Intre.HA-Curtain":
-                self._productVersion = 5
-                _LOGGER.debug(f"准备上报属性: productkey={self._productKey} ")    
+                self._productVersion = 9
+                _LOGGER.debug(f"准备上报属性: productkey={self._productKey} ")   
         return{
             "parentDeviceId": self._parent_deviceid,
             "parentProductKey": "Intre.BGZ001",
@@ -298,8 +306,8 @@ class IntreIoTProduct:
     def service_call_callback(self,data:dict)->bool:
         _LOGGER.debug('service_call')
         _LOGGER.debug(data)
-        if data['module']['moduleKey'] in self._sub_module_service_call:
-            for handler in self._sub_module_service_call[data['module']['moduleKey']]:
+        if data['data']['module']['moduleKey'] in self._sub_module_service_call:
+            for handler in self._sub_module_service_call[data['data']['module']['moduleKey']]:
                 handler(data)
 
     def sub_service_call(self,modulekey:str,handler: Callable[[list, Any], None])->None:

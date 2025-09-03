@@ -45,11 +45,11 @@ off Intretech or its affiliates' products.
 
 Constants.
 """
-DOMAIN: str = 'intrehomeControl'
+DOMAIN: str = 'intre_smart_home_control'
 DEFAULT_NAME: str = 'Intre Home Control'
 
 DEFAULT_NICK_NAME: str = 'Intretech'
-INTRE_HA_CONTROL_VERSION:int = 4
+INTRE_HA_CONTROL_VERSION:int = 7
 INTREHOME_HTTP_API_TIMEOUT: int = 30
 INTREHOME_MQTT_KEEPALIVE: int = 60
 # seconds, 3 days
@@ -61,10 +61,15 @@ OAUTH2_AUTH_URL: str = 'https://account.Intretech.com/oauth2/authorize'
 DEFAULT_OAUTH2_API_HOST: str = 'ha.api.io.mi.com'
 
 INTRE_HA_PRODUCT_KEY="Intre.BGZ001"
-INTRE_PHYSICAL_MODEL_CONTROL_VERSION:int = 2
-MQTT_ToH ='dev/'
-INTRE_SECURE_KEY ="123456"
-INTREIOT_HTTP_SERVER_URL = 'https://server1.intreplus.com:4431'
+INTRE_PHYSICAL_MODEL_CONTROL_VERSION:int = 3
+
+#MQTT_ToH ='test/'
+#INTRE_SECURE_KEY ="123456"
+#INTREIOT_HTTP_SERVER_URL = 'https://server1.intreplus.com:4432'
+MQTT_ToH =''
+INTRE_SECURE_KEY ="intre-prod"
+INTREIOT_HTTP_SERVER_URL = 'https://mars.intreplus.com'
+
 # seconds, 14 days
 SPEC_STD_LIB_EFFECTIVE_TIME = 3600*24*14
 # seconds, 14 days

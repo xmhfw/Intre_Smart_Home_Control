@@ -112,6 +112,9 @@ class IntreSwitch(IntreIoTModule):
         return result
 
     async def _entity_state_notify(self,newstate)->None:
+        if newstate is None:
+            _LOGGER.debug("Received None as newstate in _entity_state_notify")
+            return
         _LOGGER.debug(f"开关新状态: {newstate.state,newstate.entity_id}")  
         self._onOff=StateUtils.util_get_state_onoff(newstate)
         await self._intre_ss.report_prop_async(self._product.productKey,self._product.deviceId,self._module_key,'onOff',str(int(self._onOff)))
@@ -126,8 +129,9 @@ class IntreSwitch(IntreIoTModule):
             'entity_id': self._entity_id
         }
         
-        # 获取服务字典（不是列表）
-        service = service_call_data.get('module', {}).get('service', {})
+        # 从data字段获取模块信息（根据日志结构修正路径）
+        module = service_call_data.get('data', {}).get('module', {})
+        service = module.get('service', {})
         
         # 检查服务键
         if service.get('serviceKey') == 'toggleOnOff':

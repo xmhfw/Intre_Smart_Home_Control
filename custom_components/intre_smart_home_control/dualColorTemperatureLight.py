@@ -175,7 +175,7 @@ class IntreTempLight(IntreIoTModule):
         
         # 构建并返回模块JSON数据
         return {
-            "templateModuleKey": "dualColorTemperatureLight_1",
+            "templateModuleKey": "dualColorTemperatureLight_2",
             "instanceModuleKey": self._module_key,
             "instanceModuleName": instance_module_name,  # 动态生成的名称
             "propertyList": [
@@ -235,6 +235,9 @@ class IntreTempLight(IntreIoTModule):
     
 
     async def _entity_state_notify(self,newstate)->None:
+        if newstate is None:
+            _LOGGER.debug("Received None as newstate in _entity_state_notify")
+            return
         _LOGGER.debug(newstate)
         attributes = newstate.attributes
         brightness = attributes.get('brightness', 'N/A')
@@ -248,7 +251,24 @@ class IntreTempLight(IntreIoTModule):
         #OnOff
         self._onOff=StateUtils.util_get_state_onoff(newstate)
         self._brightness=StateUtils.util_get_state_brightness(newstate)
-        await self._intre_ss.report_prop_async(self._product.productKey,self._product.deviceId,self._module_key,'onOff',str(int(self._onOff)))
+        # 改进：添加非空检查
+        if self._onOff is None:
+            _LOGGER.warning("self._onOff is None, cannot report onOff state")
+            return
+
+        # 尝试安全转换
+        try:
+            on_off_str = str(int(self._onOff))
+            await self._intre_ss.report_prop_async(
+                self._product.productKey,
+                self._product.deviceId,
+                self._module_key,
+                'onOff',
+                on_off_str
+            )
+        except (ValueError, TypeError) as e:
+            _LOGGER.error(f"Failed to convert onOff value {self._onOff}: {str(e)}")
+        #await self._intre_ss.report_prop_async(self._product.productKey,self._product.deviceId,self._module_key,'onOff',str(int(self._onOff)))
      
         #brightness
         if 'brightness' not in newstate.attributes:
@@ -297,9 +317,15 @@ class IntreTempLight(IntreIoTModule):
         _LOGGER.debug(f"service_call_data: {service_call_data}")
         
         try:
-            # 获取服务输入值
-            service_input_value = service_call_data.get('module', {}).get('service', {}).get('serviceInputValue')
-            service_key = service_call_data.get('module', {}).get('service', {}).get('serviceKey')
+            # 1. 先获取嵌套在data里的module（关键修复点）
+            module = service_call_data.get('data', {}).get('module', {})
+            if not module:  # 若未获取到module，直接返回避免后续报错
+                _LOGGER.warning("未从service_call_data中获取到有效的module信息")
+                return
+            
+            # 2. 从module中提取服务键和输入值
+            service_key  = module.get('service', {}).get('serviceKey')
+            service_input_value  = module.get('service', {}).get('serviceInputValue')
 
             # 处理toggleOnOff服务 - 反转开关状态
             if service_key == 'toggleOnOff':
@@ -326,7 +352,59 @@ class IntreTempLight(IntreIoTModule):
             # 解析JSON
             input_data = json.loads(service_input_value)
             _LOGGER.debug(f"解析到的输入数据: {input_data}")
-    
+
+            # 执行日光效果设置
+            daylight_effect = input_data.get('daylightEffect')
+            if daylight_effect is not None:
+                _LOGGER.debug(f"设置日光效果: {daylight_effect}")
+                # 这里添加设置日光效果的业务逻辑...
+                if daylight_effect == 1:
+                    _LOGGER.debug("执行日光效果 1(明亮)")
+                    # 业务逻辑1：色温6000K，亮度100%，若最大色温值小于6000则直接使用色温最大值执行
+                    target_brightness = 100  # 目标亮度100%
+                    target_temp = 6000       # 目标色温6000K
+                    # 校验色温：若最大色温<6000，使用最大值
+                    final_temp = min(target_temp, self._max_color_temp_kelvin) if hasattr(self, '_max_color_temp_kelvin') else target_temp
+                    data['brightness'] = math.ceil(target_brightness * 2.55)
+                    self._intre_ss.call_ha_service('light', 'turn_on', data)
+                    data['color_temp'] = float(10**6 / final_temp)
+                    self._intre_ss.call_ha_service('light', 'turn_on', data)
+                    _LOGGER.debug(f"明亮模式：亮度{target_brightness}%，色温{final_temp}K")
+                elif daylight_effect == 2:
+                    _LOGGER.debug("执行日光效果 1(温馨)")
+                    # 业务逻辑2：色温4500K，亮度60%，若色温可控范围不在4500内，则只控制亮度
+                    target_brightness = 60   # 目标亮度60%
+                    target_temp = 4500       # 目标色温4500K
+                    # 校验色温：仅当设备支持4500K（在上下限内）时才控制色温
+                    if hasattr(self, '_min_color_temp_kelvin') and hasattr(self, '_max_color_temp_kelvin'):
+                        if self._min_color_temp_kelvin <= target_temp <= self._max_color_temp_kelvin:
+                            data['color_temp'] = float(10**6 / target_temp)
+                            self._intre_ss.call_ha_service('light', 'turn_on', data)
+                            _LOGGER.debug(f"温馨模式：亮度{target_brightness}%，色温{target_temp}K")
+                        else:
+                            _LOGGER.debug(f"温馨模式：色温{target_temp}K超出设备范围,仅控制亮度{target_brightness}%")
+                    else:
+                        _LOGGER.warning("未定义设备色温范围，温馨模式仅控制亮度")
+                    # 无论色温是否生效，均执行亮度控制
+                    data['brightness'] = math.ceil(target_brightness * 2.55)
+                    self._intre_ss.call_ha_service('light', 'turn_on', data)
+                elif daylight_effect == 3:
+                    _LOGGER.debug("执行日光效果 3(夜光)")
+                    # 业务逻辑3：色温3500K，亮度20%，若最小色温值大于3500则直接使用色温最小值执行
+                    target_brightness = 20   # 目标亮度20%
+                    target_temp = 3500       # 目标色温3500K
+                    # 校验色温：若最小色温>3500，使用最小值
+                    final_temp = max(target_temp, self._min_color_temp_kelvin) if hasattr(self, '_min_color_temp_kelvin') else target_temp
+                    # 执行控制
+                    data['brightness'] = math.ceil(target_brightness * 2.55)
+                    self._intre_ss.call_ha_service('light', 'turn_on', data)
+                    data['color_temp'] = float(10**6 / final_temp)
+                    self._intre_ss.call_ha_service('light', 'turn_on', data)
+                    _LOGGER.debug(f"夜光模式：亮度{target_brightness}%，色温{final_temp}K")
+
+            else:
+                _LOGGER.debug("输入数据中未包含daylightEffect参数")
+
             # 处理开关控制：onOff为1时开灯，0时关灯
             if 'onOff' in input_data:
                 on_off_status = input_data['onOff']
@@ -348,17 +426,17 @@ class IntreTempLight(IntreIoTModule):
                     self._intre_ss.call_ha_service('light', 'turn_on', data)
                     _LOGGER.debug(f"亮度调节: 原始值={brightness_data}, 转换后={data['brightness']}")
                 else:
-                    _LOGGER.error(f"无效的亮度值: {brightness_data}，必须是0-100之间的数字")
+                    _LOGGER.error(f"无效的亮度值: {brightness_data},必须是0-100之间的数字")
             
             # 处理色温调节
             if 'colorTemperature' in input_data:
                 color_temp_data = input_data['colorTemperature']
-                if isinstance(color_temp_data, (int, float)) and 2500 <= color_temp_data <= 20000:
+                if isinstance(color_temp_data, (int, float)) and self._min_color_temp_kelvin <= color_temp_data <= self._max_color_temp_kelvin:
                     data['color_temp'] = float(10**6 / color_temp_data)
                     self._intre_ss.call_ha_service('light', 'turn_on', data)
                     _LOGGER.debug(f"色温调节: 原始值={color_temp_data}K, 转换后={data['color_temp']}mired")
                 else:
-                    _LOGGER.error(f"无效的色温值: {color_temp_data}，必须是2700-6500之间的数字")
+                    _LOGGER.error(f"无效的色温值: {color_temp_data},必须是min-max之间的数字")
         
         except KeyError as e:
             _LOGGER.error(f"服务调用数据缺少必要的键: {e}")
@@ -381,7 +459,7 @@ class IntreTempLight(IntreIoTModule):
                 _LOGGER.debug("batch_service=%s %s",service,data)  
                 self._intre_ss.call_ha_service('light',service,data)
                 continue  # 执行完后结束当前服务项的处理 
-            if service_item['serviceKey'] == 'lightControlByBatch':
+            if service_item['serviceKey'] == 'lightControlByBatchWithoutTransitionTime':
                 try:
                     # 先将JSON字符串解析为字典
                     input_values = json.loads(service_item['serviceInputValue'])
@@ -403,10 +481,10 @@ class IntreTempLight(IntreIoTModule):
                         self._intre_ss.call_ha_service('light', 'turn_off', data)
                     
                     continue  # 执行完后结束当前服务项的处理  
-                # 情况3：同时包含onOff、colorTemperature和transitionTime三个参数
-                required_keys = {'onOff', 'colorTemperature', 'transitionTime'}
-                if required_keys.issubset(input_values.keys()) and len(input_values) == 3:
-                    _LOGGER.debug("Found onOff, colorTemperature and transitionTime - special handling")
+                # 情况3：同时包含onOff、colorTemperature 2个参数
+                required_keys = {'onOff', 'colorTemperature'}
+                if required_keys.issubset(input_values.keys()) and len(input_values) == 2:
+                    _LOGGER.debug("Found onOff, colorTemperature  - special handling")
                     service = 'turn_on'
                     
                     if service == 'turn_on':
@@ -414,18 +492,14 @@ class IntreTempLight(IntreIoTModule):
                         try:
                             kelvin_temp = input_values['colorTemperature']
                             mired_value = 10**6 / float(kelvin_temp)
-                            min_mired = 50
-                            max_mired = 400
-                            data['color_temp'] = max(min_mired, min(max_mired, int(mired_value)))
+                            data['color_temp'] = mired_value
                             _LOGGER.debug(f"Converted {kelvin_temp}K to {data['color_temp']} mired")
                         except (ZeroDivisionError, ValueError):
                             _LOGGER.error(f"Invalid color temperature value: {kelvin_temp}")
                         
-                        # 处理过渡时间
-                        data['transition'] = input_values['transitionTime'] 
                         # 处理亮度（保持不变）
-                        data['brightness'] = int((self._brightness) * 2.55) if service == 'turn_on' else None
-                    
+                        #data['brightness'] = int((input_values.get('brightness', 0) * 255)/100) if service == 'turn_on' else None
+                        #_LOGGER.debug(data['brightness'])
                     _LOGGER.debug(f"Calling service {service} with special data: {data}")
                     self._intre_ss.call_ha_service('light', service, data)
                     continue   
@@ -433,9 +507,10 @@ class IntreTempLight(IntreIoTModule):
                 # 确定开关服务类型
                 service = 'turn_on' if input_values.get('onOff', 0) else 'turn_off'
                 
-                # 处理亮度（保持不变）
-                brightness = int(input_values.get('brightness', 0) * 2.55) if service == 'turn_on' else None
-                
+                # 处理亮度（保持不变）  
+                brightness = int((input_values.get('brightness', 0) * 255)/100) if service == 'turn_on' else None
+                _LOGGER.debug(brightness)
+                _LOGGER.debug(input_values.get('brightness'))
                 # 处理色温（将开尔文转换为Mired值）
                 color_temp = None
                 if service == 'turn_on':
@@ -444,26 +519,18 @@ class IntreTempLight(IntreIoTModule):
                         try:
                             # 转换公式：Mired = 1,000,000 / 开尔文
                             mired_value = 10**6 / float(kelvin_temp)
-                            
-                            # 大多数灯具的Mired值范围在153-500之间（对应约6500K-2000K）
-                            # 根据实际设备支持范围调整这个区间
-                            min_mired = 153
-                            max_mired = 500
-                            color_temp = max(min_mired, min(max_mired, int(mired_value)))
+
+                            color_temp = mired_value
                             
                             _LOGGER.debug(f"Converted {kelvin_temp}K to {color_temp} mired")
                         except (ZeroDivisionError, ValueError):
                             _LOGGER.error(f"Invalid color temperature value: {kelvin_temp}")
-                
-                # 处理过渡时间（毫秒转秒）
-                transition = input_values.get('transitionTime', 0) // 1000 if service == 'turn_on' else None
                 
                 # 构建服务数据
                 service_data = {
                     'entity_id': self._entity_id,
                     'brightness': brightness,
                     'color_temp': color_temp,
-                    'transition': transition
                 }
                 
                 # 过滤掉None值
@@ -502,15 +569,13 @@ class IntreTempLight(IntreIoTModule):
             elif prop.get('propertyKey') == 'brightness':
                 brightness = int(prop_value)
                 if 0 <= brightness <= 100:
-                    data['brightness'] = int(brightness * 2.55)
+                    data['brightness'] = int((brightness * 255)/100)    
                 _LOGGER.debug("bright service=%d ",data)  
                 self._intre_ss.call_ha_service('light',service,data)
             elif prop.get('propertyKey') == 'colorTemperature':
                 kelvin = int(prop_value)
-                if 2000 <= kelvin <= 6500:  # 常见色温范围
+                if self._min_color_temp_kelvin <= kelvin <= self._max_color_temp_kelvin:  # 常见色温范围
                     mired = int(10**6 / kelvin)
-                    # 限制Mired值在大多数设备支持的范围内
-                    mired = max(153, min(500, mired))
                     data['color_temp'] = mired
                 _LOGGER.debug("colorTemperature service=%d ",data)  
                 self._intre_ss.call_ha_service('light',service,data)    

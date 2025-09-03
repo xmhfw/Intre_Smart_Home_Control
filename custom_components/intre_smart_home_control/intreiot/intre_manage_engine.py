@@ -367,8 +367,12 @@ class  IntreManagementEngine():
         )
     async def data_define_report_async(self,productkey:str,deviceid:str,data_define:list)->None:
         await self._intreIot_client.data_define_report_async(productkey=productkey,deviceid=deviceid,data_define=data_define) 
+
     async def prop_set_reply_async(self,productkey:str,deviceid:str,msgid:str,code:str)->None:
         await self._intreIot_client.prop_set_reply_async(productkey=productkey,deviceid=deviceid,msgid=msgid,code=code)
+
+    async def service_set_reply_async(self,productkey:str,deviceid:str,moduleKey:str,serviceKey: str,msgid:str,code:str)->None:
+        await self._intreIot_client.service_set_reply_async(productkey=productkey,deviceid=deviceid,moduleKey=moduleKey,serviceKey=serviceKey,msgid=msgid,code=code)   
     @property
     def user_confg(self) -> dict:
         return self._user_config
@@ -428,6 +432,7 @@ class  IntreManagementEngine():
             self._intreIot_client.down_tls_property_report_reply(topic=down_tls_property_report_reply_topic,handler=self.down_tls_property_report_reply_topic_callback)
             _LOGGER.debug(f"订阅的主题是333: {down_tls_event_report_reply_topic}")  # 打印订阅的 topic   
             '''
+        self.__request_refresh_scene_device_info(30)
         return True
     @final
     async def sync_ha_device_and_scene_cloud(self) -> bool:
@@ -545,6 +550,7 @@ class  IntreManagementEngine():
                         self._intre_devicesn_add.append(product.deviceSn)
 
                         dynamic_info =product.get_dynamic_module_json()
+                        _LOGGER.debug(dynamic_info)
                         rsp= [module["instanceModuleKey"] for module in dynamic_info["dynamicModuleList"]]
                         await self._intreIot_client._http_client.add_dynamic_module(dynamic_info=dynamic_info)  
                     else:
