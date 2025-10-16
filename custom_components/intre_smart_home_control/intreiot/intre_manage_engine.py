@@ -1,4 +1,4 @@
-import importlib
+﻿import importlib
 import logging
 import os
 import sys
@@ -19,6 +19,7 @@ from .intreIot_network import IntreIoTNetwork
 from .intreIot_storage import IntreIoTStorage
 from collections import Counter
 from homeassistant.helpers import device_registry
+
 LONG_LIVED_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIxMjljN2YwMDZlMTU0NjQ0OTQyMDdhMGEyMzRiMTI1YSIsImlhdCI6MTc1NTI1NDE2OSwiZXhwIjoyMDcwNjE0MTY5fQ.-URgGajTKRAt02qG-uJ082AR_h3FJQgimprSAp-U1QE"
 HA_IP = "10.0.0.105"
 ENTITY_ID = "switch.ws04_d2_5_1"
@@ -101,6 +102,7 @@ class  IntreManagementEngine():
     _device_entity_id_list:list
     _rspdata:list
     _sync_product_info:list
+    _sync_scene_info:list
     _product_device_id:list
     def __init__(
         self,
@@ -128,90 +130,9 @@ class  IntreManagementEngine():
         self._device_entity_id_list = []
         self._rspdata = []
         self._sync_product_info = []
+        self._sync_scene_info = []
         self._product_device_id = []
-    ''' 
-    #HA设备离在线
-    async def get_ha_device_status(self, ha_ip, entity_id, long_lived_token):
-        """更精准区分设备在线状态和功能开关状态"""
-        api_url = f"http://{ha_ip}:8123/api/states/{entity_id}"
-        headers = {
-            "Authorization": f"Bearer {long_lived_token}",
-            "Content-Type": "application/json"
-        }
 
-        try:
-            async with aiohttp.ClientSession() as session:
-                async with session.get(api_url, headers=headers, timeout=5) as response:
-                    # 1. 实体存在（200）：正常获取状态
-                    if response.status == 200:
-                        device_data = await response.json()
-                        # 设备在线状态（基于available字段）
-                        is_available = device_data.get("attributes", {}).get("available")
-                        # 功能开关状态（基于state字段）
-                        switch_state = device_data.get("state", "unknown")
-                        _LOGGER.debug(f"switch_state: {switch_state}")
-                        _LOGGER.debug(f"is_available: {is_available}")
-                        # 组合状态描述
-                        online_desc = "在线" if is_available else "离线"
-                        func_desc = f"（功能关闭）" if switch_state == "off" else f"（功能开启）"
-                        if switch_state == "on":
-                            online_desc = "在线" 
-                            func_desc = "（功能开启）"
-                            return {
-                                "online_status": f"{online_desc}{func_desc}",
-                                "switch_state": switch_state,
-                                "is_power_off": False  # 设备未断电（能正常通信）
-                            }
-                        elif switch_state == "off":
-                            online_desc = "在线" 
-                            func_desc = "（功能关闭）" 
-                            return {
-                                "online_status":f"{online_desc}{func_desc}",
-                                "switch_state": "off",
-                                "is_power_off": False
-                            } 
-                        elif switch_state == "unknown":
-                            online_desc = "离线" 
-                            func_desc = "unfunction"
-                            return {
-                                "online_status": f"{online_desc}{func_desc}",
-                                "switch_state": switch_state,
-                                "is_power_off": True  # 设备断电（不能正常通信）
-                            }
-                    
-                    # 2. 404错误：实体不存在（可能是设备彻底离线或未注册）
-                    elif response.status == 404:
-                        online_desc = "离线" 
-                        func_desc = "unfunction" 
-                        return {
-                            "online_status":f"{online_desc}{func_desc}",
-                            "switch_state": "unknown",
-                            "is_power_off": True
-                        }
-                    
-                    # 3. 其他HTTP错误
-                    else:
-                        return {
-                            "online_status": f"获取失败:HTTP状态码({response.status})",
-                            "switch_state": None,
-                            "is_power_off": None
-                        }
-
-        # 网络错误：设备无法通信（大概率断电）
-        except (aiohttp.ClientConnectionError, asyncio.TimeoutError):
-            return {
-                "online_status": "离线（无法连接，可能已断电）",
-                "switch_state": "unknown",
-                "is_power_off": True
-            }
-        
-        except Exception as e:
-            return {
-                "online_status": f"获取失败:{str(e)}",
-                "switch_state": None,
-                "is_power_off": None
-            }
-    '''
     async def init_async(self) -> None:
         self._intre_products=[]
         self._intre_devicesn_add=[]  #本地存储所有已经创建成盈趣物模型的产品devicesn
@@ -434,17 +355,30 @@ class  IntreManagementEngine():
             '''
         self.__request_refresh_scene_device_info(30)
         return True
+
+    async def get_all_ha_devices(self):
+        _LOGGER.debug("get_all_ha_devices")
+        # 存储设备ID的列表
+        device_SNs = []
+        dr = device_registry.async_get(self._hass)
+        er = entity_registry.async_get(self._hass)
+        # 遍历所有设备
+        for device in dr.devices.values():
+            #_LOGGER.debug(f"设备ID: {device.id}")
+            device_SNs.append(device.id)
+        # 打印device_SNs列表
+        #_LOGGER.debug(f"所有设备ID列表: {device_SNs}")
+        return device_SNs  
+
     @final
     async def sync_ha_device_and_scene_cloud(self) -> bool:
-
         _LOGGER.debug("sync_ha_device_and_scene_cloud start")
         from ..notify import (notify_async_forward_entry_setups)
-        
         #获取配置数据
         self._user_config = await self._storage.load_user_config_async(uid=self._config_entry.entry_id, cloud_server=self._cloud_server)
         _LOGGER.debug(f'self._user_config={self._user_config}')
         ##############################################scene sync#############################
-
+        '''
         #1.获取HA平台的所有scene
         if self._config_entry.data['scene_sync'] ==True:
             ha_scenes = [state for state in self._hass.states.async_all() if state.domain == 'scene']
@@ -469,17 +403,95 @@ class  IntreManagementEngine():
                 for scene in ha_scenes: 
                     #_LOGGER.debug(f"synccloudName: {scene.name}, Entity ID: {scene.entity_id}")
                     if scene.entity_id not in cloud_scene_entity_id_list:
-                        scenes_data = self.add_scene_module_json(name=scene.name,entity_id=scene.entity_id)
+                        scenes_data = self.add_scene_module_json(name=scene.name,entity_id=scene.entity_id)#scene.name   scene.entity_id
                         await self._intreIot_client._http_client.add_scene_module(scene_info=scenes_data)
 
                 if self._intreIot_client._device_id not in self._intre_devicesn_sub:
                     self._intre_devicesn_sub.append(self._intreIot_client._device_id)
                     bacth_service_prop_topic:str = f'{MQTT_ToH}device/Intre.BGZ001/{self._intreIot_client._device_id}/down/tls/batch/property/service/set'
                     self._intreIot_client.sub_bacth_service_prop(topic=bacth_service_prop_topic,handler=self.ha_bacth_service_prop_callback)
+        '''
+        if self._config_entry.data['scene_sync'] == True:
+            # 1. 初始化scene同步存储（从user_config读取，无则默认空列表）
+            self._sync_scene_info = self._user_config.get("sync_scene_info", [])
+            # 2. 获取HA平台的所有scene
+            ha_scenes = [state for state in self._hass.states.async_all() if state.domain == 'scene']
+            local_scene_entity_ids = [scene.entity_id for scene in ha_scenes]
+            _LOGGER.debug(f'local_scene_entity_ids={local_scene_entity_ids}')
+            
+            # 3. 格式化本地场景数据
+            local_scenes_list = []  # 存储本地所有场景的结构化数据
+            for scene in ha_scenes:         
+                _LOGGER.debug(f"SceneName: {scene.name}, Scene Entity ID: {scene.entity_id}")
+                scene_dict = {
+                    "sceneId": scene.entity_id,
+                    "sceneName": scene.name
+                }
+                local_scenes_list.append(scene_dict)  # 加入本地场景列表
+
+            # 4. 场景的"同步生命周期管理"（检测新增、修改）
+            # 4.1 标记是否需要上报（有新增或修改时为True）
+            need_report = False
+            # 4.2 复制原始场景存储列表（用于对比）
+            original_sync_scenes = self._sync_scene_info.copy()
+
+            # 检查是否有新增场景或名称修改
+            for local_scene in local_scenes_list:
+                # 查找是否存在相同sceneId的同步场景
+                matching_scenes = [
+                    sync_scene for sync_scene in original_sync_scenes
+                    if sync_scene["sceneId"] == local_scene["sceneId"]
+                ]
                 
-                
-        ##############################################device sync#############################
+                if not matching_scenes:
+                    # 发现新增场景
+                    need_report = True
+                    _LOGGER.debug(f"发现新增场景 {local_scene['sceneId']}，需要上报所有本地场景")
+                    break  # 无需继续检查，已经确定需要上报
+                    
+                # 检查场景名称是否有变化
+                if local_scene["sceneName"] != matching_scenes[0]["sceneName"]:
+                    # 发现场景名称修改
+                    need_report = True
+                    _LOGGER.debug(f"发现场景 {local_scene['sceneId']} 名称修改，需要上报所有本地场景")
+                    break  # 无需继续检查，已经确定需要上报
+
+            # 4.3 更新同步存储列表（保留最新的场景信息）
+            self._sync_scene_info = local_scenes_list.copy()
+
+            # 4.4 处理本地已删除的场景，并标记需要上报
+            deleted_scenes = [
+                sync_scene for sync_scene in original_sync_scenes
+                if not any(local_scene["sceneId"] == sync_scene["sceneId"] for local_scene in local_scenes_list)
+            ]
+            for scene in deleted_scenes:
+                _LOGGER.debug(f"场景 {scene['sceneId']}（{scene['sceneName']}）已从本地删除")
+                need_report = True  # 有删除场景时，标记需要上报
+
+            # 4.5 当有新增、修改或删除时，上报所有本地场景
+            if need_report:
+                all_scenes_str = json.dumps(local_scenes_list)
+                _LOGGER.debug(f"因存在新增、修改或删除的场景，上报所有本地场景: {all_scenes_str}")
+                await self.report_prop_async(
+                    'Intre.BGZ001',
+                    self._intreIot_client._device_id,
+                    'deviceInfo',
+                    'thirdSceneList',
+                    all_scenes_str
+                )
+            else:
+                _LOGGER.debug("没有新增、修改或删除的场景，无需上报")
+
+        # 订阅执行情景回调
+        bacth_service_prop_topic:str = f'{MQTT_ToH}device/Intre.BGZ001/{self._intreIot_client._device_id}/down/tls/batch/property/service/set'
+        self._intreIot_client.sub_bacth_service_prop(topic=bacth_service_prop_topic,handler=self.ha_bacth_service_prop_callback)
+    
+        ##############################################device sync#############################    
         if self._config_entry.data['device_sync'] ==True:
+            # 直接获取设备SN列表
+            Device_SN = await self.get_all_ha_devices()
+            _LOGGER.debug(f"从get_all_ha_devices获取的设备SN列表: {Device_SN}")
+            
             #1.获取HA平台符合要求的设备
             locol_hadevices = self._intre_ha.get_ha_devices()
 
@@ -516,8 +528,9 @@ class  IntreManagementEngine():
             config_data = {'_hadevices': _hadevices}
             self._hass.data[DOMAIN]['config_data'] = config_data
             await notify_async_forward_entry_setups(hass=self._hass,config_entry=self._config_entry,async_add_entities=None,moudle_list=['switch','curtain','singleColorTemperatureLight','dualColorTemperatureLight','RGBWLight','RGBCWLight'])
-
+            _LOGGER.debug(f"当前_hadevices数量: {len(_hadevices)}")  # 关键：检查长度
             for hadevice in _hadevices:
+                _LOGGER.debug('hadevice111111111111111111')
                 _LOGGER.debug(hadevice)
                 product = hadevice['product']
                 product.set_parent_device_id(self._intreIot_client._device_id)
@@ -528,6 +541,8 @@ class  IntreManagementEngine():
 
             _LOGGER.debug(f'self._intre_devicesn_add={self._intre_devicesn_add}')
             _LOGGER.debug(f'self._sync_product_info={self._sync_product_info}')
+            #test
+
             #4.遍历所有已经创建模型的设备，针对还没添加到cloud的，做添加操作，添加成功后，记录到_sync_product_info，添加后的deviceSN 记录到_intre_devicesn_add
             for product in self._intre_products:
                 device_id = next((info['deviceId'] for info in self._sync_product_info 
@@ -559,14 +574,46 @@ class  IntreManagementEngine():
                     product._deviceId = device_id
                     if product.deviceSn not in self._intre_devicesn_add:
                         self._intre_devicesn_add.append(product.deviceSn)
+            #TEST
+            # 复制一份原始列表用于迭代检查（避免在迭代中修改原列表）
+            original_sync_products = self._sync_product_info.copy()
+            _LOGGER.debug(f'original_sync_products={original_sync_products}')
+            # 清空原列表，准备重新填充存在匹配的条目
+            self._sync_product_info = []
+    
+            # 收集需要删除的deviceSn
+            devices_to_remove = []
+            for product in original_sync_products:
+                sn = product['deviceSn']
+                if sn in Device_SN:
+                    # 存在匹配，保留该条目
+                    self._sync_product_info.append(product)
+                    _LOGGER.debug(f"deviceSn {sn} 在设备列表中存在匹配，已保留")
+                else:
+                    # 不存在匹配，移除该条目并记录日志
+                    _LOGGER.debug(f"deviceSn {sn} 在设备列表中不存在匹配，已移除，对应的deviceId为: {product['deviceId']}")
+                    await self._intreIot_client._http_client.device_sub_delete(product['deviceId'])
+                    devices_to_remove.append(sn)  # 记录需要删除的deviceSn
 
+            # 从_intre_products中移除对应的产品实例
+            self._intre_products = [
+                product for product in self._intre_products 
+                if product.deviceSn not in devices_to_remove
+            ]
+            # 同时清理_intre_devicesn_add中对应的条目
+            self._intre_devicesn_add = [
+                sn for sn in self._intre_devicesn_add 
+                if sn not in devices_to_remove
+            ]
             await self._storage.update_user_config_async(
-                        uid=self._config_entry.entry_id, cloud_server=self._cloud_server,
-                        config={'sync_product_info': self._sync_product_info})
+                        uid=self._config_entry.entry_id, cloud_server=self._cloud_server,   
+                        config={'sync_product_info': self._sync_product_info,'sync_scene_info': self._sync_scene_info})
             _LOGGER.debug(f'1111self._sync_product_info={self._sync_product_info}')
-            _LOGGER.debug(f'self._intre_devicesn_sub={self._intre_devicesn_sub}')
+            _LOGGER.debug(f'self._intre_devicesn_sub={self._intre_devicesn_sub}') 
+            _LOGGER.debug(f"当前self._intre_products数量: {len(self._intre_products)}")  # 关键：检查长度       
             #5.遍历所有已经添加到cloud的设备，针对还未订阅的，做订阅操作
             for product in self._intre_products:
+                _LOGGER.debug(product.deviceSn)
                 if product.deviceSn in self._intre_devicesn_add:#已经添加到云平台
                     if product.deviceSn not in self._intre_devicesn_sub:
 

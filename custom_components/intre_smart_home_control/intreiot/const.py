@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Copyright (C) 2024 Intretech Corporation.
 
@@ -49,7 +49,7 @@ DOMAIN: str = 'intre_smart_home_control'
 DEFAULT_NAME: str = 'Intre Home Control'
 
 DEFAULT_NICK_NAME: str = 'Intretech'
-INTRE_HA_CONTROL_VERSION:int = 7
+INTRE_HA_CONTROL_VERSION:int = 10
 INTREHOME_HTTP_API_TIMEOUT: int = 30
 INTREHOME_MQTT_KEEPALIVE: int = 60
 # seconds, 3 days
@@ -61,7 +61,7 @@ OAUTH2_AUTH_URL: str = 'https://account.Intretech.com/oauth2/authorize'
 DEFAULT_OAUTH2_API_HOST: str = 'ha.api.io.mi.com'
 
 INTRE_HA_PRODUCT_KEY="Intre.BGZ001"
-INTRE_PHYSICAL_MODEL_CONTROL_VERSION:int = 2
+INTRE_PHYSICAL_MODEL_CONTROL_VERSION:int = 3
 
 #MQTT_ToH ='test/'
 #INTRE_SECURE_KEY ="123456"

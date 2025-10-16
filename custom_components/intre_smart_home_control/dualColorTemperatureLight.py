@@ -156,13 +156,12 @@ class IntreTempLight(IntreIoTModule):
         _LOGGER.debug('Initializing dual color temperature light module...')
         _LOGGER.debug(f'Product Key: {self._product.productKey}')
         _LOGGER.debug(f'Device ID: {self._product.deviceId}')
-        match = re.search(r'_(\d+)$', self._module_key)
-        if match:
-            index = match.group(1)
-            instance_module_name = f"双色温1"
+        s = self._module_key
+        if s.startswith("light."):
+            instance_module_name = s.split("light.")[1]
         else:
-            # 匹配失败时使用默认名称
-            instance_module_name = "未知设备"
+            instance_module_name = "双色温"  # 或者根据需要设置默认值
+        _LOGGER.debug(f'instance_module_name={instance_module_name}')
         # 验证关键参数是否有效
         product_key = self._product.productKey
         device_id = self._product.deviceId

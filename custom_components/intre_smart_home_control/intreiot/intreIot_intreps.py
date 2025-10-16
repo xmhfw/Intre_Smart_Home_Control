@@ -677,7 +677,7 @@ class IntrepsClient(ABC):
                 certfile=self._cert_file,
                 keyfile=self._key_file)
         else:
-            self._mqtt.tls_set(ca_certs='/config/custom_components/intre_smart_home_control/intreiot/ca/release.pem',tls_version=ssl.PROTOCOL_TLS_CLIENT)
+            self._mqtt.tls_set(ca_certs='/config/custom_components/intre_smart_home_control/intreiot/ca/service2.pem',tls_version=ssl.PROTOCOL_TLS_CLIENT)
         self._mqtt.tls_insecure_set(True)
         self._mqtt.on_connect = self.__on_connect
         self._mqtt.on_connect_fail = self.__on_connect_failed
@@ -773,7 +773,6 @@ class IntrepsClient(ABC):
             interval = self.__get_next_reconnect_time()
             self.log_error(
                 'intreps try reconnect after %sms', interval)
-        _LOGGER.debug('try conneent mqtt')
         self._intreps_reconnect_timer = self.mev_set_timeout(
             interval, self.__intreps_connect, None)
 
@@ -807,7 +806,6 @@ class IntrepsClient(ABC):
 
     def __intreps_connect(self, ctx: Any = None) -> None:
         result = MQTT_ERR_UNKNOWN
-        _LOGGER.debug("__intreps_connect")
         if self._intreps_reconnect_timer:
             self.mev_clear_timeout(self._intreps_reconnect_timer)
             self._intreps_reconnect_timer = None
@@ -820,7 +818,6 @@ class IntrepsClient(ABC):
                 self.mev_set_read_handler(self._mqtt_fd, None, None)
                 self.mev_set_write_handler(self._mqtt_fd, None, None)
                 self._mqtt_fd = -1
-            _LOGGER.debug("__intreps_connect 22 %s %s",self._host,self._port)
             result = self._mqtt.connect(
                 host=self._host, port=self._port,
                 clean_start=True, keepalive=INTREHOME_MQTT_KEEPALIVE)
