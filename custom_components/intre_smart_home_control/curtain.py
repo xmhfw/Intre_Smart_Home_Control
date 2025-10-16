@@ -112,15 +112,12 @@ class IntreCover(IntreIoTModule):
     def get_module_json(self)->dict:
         timestamp_ms = str(int(time.time() * 1000))
         match = re.search(r'_(\d+)$', self._module_key)
-        instance_module_name = f"卷帘1"
-        '''
-        if match:
-            index = match.group(1)
-            instance_module_name = f"卷帘1"
+        s = self._module_key
+        if s.startswith("curtain."):
+            instance_module_name = s.split("curtain.")[1]
         else:
-            # 匹配失败时使用默认名称
-            instance_module_name = "未知设备"
-        '''
+            instance_module_name = "窗帘"  # 或者根据需要设置默认值
+        _LOGGER.debug(f'instance_module_name={instance_module_name}')
         return {
             "templateModuleKey":'liftCurtain_2',
             "instanceModuleKey": self._module_key,

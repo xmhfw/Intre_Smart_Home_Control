@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """
 Copyright (C) 2024 Intretech Corporation.
 
@@ -49,7 +49,7 @@ DOMAIN: str = 'intre_smart_home_control'
 DEFAULT_NAME: str = 'Intre Home Control'
 
 DEFAULT_NICK_NAME: str = 'Intretech'
-INTRE_HA_CONTROL_VERSION:int = 7
+INTRE_HA_CONTROL_VERSION:int = 10
 INTREHOME_HTTP_API_TIMEOUT: int = 30
 INTREHOME_MQTT_KEEPALIVE: int = 60
 # seconds, 3 days

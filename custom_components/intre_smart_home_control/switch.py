@@ -82,15 +82,12 @@ class IntreSwitch(IntreIoTModule):
     @final
     def get_module_json(self)->dict:
         timestamp_ms = str(int(time.time() * 1000))
-        # 规则：提取末尾数字作为序号，格式为"灯X"
-        match = re.search(r'_(\d+)$', self._module_key)
-        if match:
-            index = match.group(1)
-            instance_module_name = f"灯{index}"
+        s = self._module_key
+        if s.startswith("switch."):
+            instance_module_name = s.split("switch.")[1]
         else:
-            # 匹配失败时使用默认名称
-            instance_module_name = "未知设备"
-
+            instance_module_name = "灯"  # 或者根据需要设置默认值
+        _LOGGER.debug(f'instance_module_name={instance_module_name}')
         result= {
             "templateModuleKey":'switch_1',
             "instanceModuleKey": self._module_key,

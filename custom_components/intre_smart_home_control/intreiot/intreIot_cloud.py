@@ -409,3 +409,19 @@ class IntreIotHttpClient:
         if rsp['code'] == 1:
             return rsp['data']
         return None
+
+    async def device_sub_delete(self,deviceId:str)->None:
+        body={
+            "deviceId": deviceId,
+            "deleteSub": 1
+        }
+        rsp = await self.__intrehome_api_post_async(
+            url_path='/device/v1/device/sub/delete',
+            header=self.__api_request_headers(data=body),
+            data=body
+        )
+        _LOGGER.debug('device_sub_delete')
+        _LOGGER.debug(json.dumps(rsp))
+        if rsp['code'] == 1:
+            return rsp['data']
+        return None    

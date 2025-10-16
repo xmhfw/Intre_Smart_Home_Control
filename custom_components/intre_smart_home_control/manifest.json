@@ -4,7 +4,10 @@
   "config_flow": true,
   "integration_type": "hub",
   "dependencies": [],
+  "requirements": [
+    "qrcode>=8.1"
+  ],
   "documentation": "https://github.com/home-assistant/example-custom-config/tree/master/custom_components/example_light/",
-  "version": "0.1.0",
+  "version": "0.0.7",
   "codeowners": ["@W"]
 }
