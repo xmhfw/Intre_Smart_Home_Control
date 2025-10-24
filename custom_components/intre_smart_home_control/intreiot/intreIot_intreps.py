@@ -677,7 +677,7 @@ class IntrepsClient(ABC):
                 certfile=self._cert_file,
                 keyfile=self._key_file)
         else:
-            self._mqtt.tls_set(ca_certs='/config/custom_components/intre_smart_home_control/intreiot/ca/service2.pem',tls_version=ssl.PROTOCOL_TLS_CLIENT)
+            self._mqtt.tls_set(ca_certs='/config/custom_components/intre_smart_home_control/intreiot/ca/release.pem',tls_version=ssl.PROTOCOL_TLS_CLIENT)
         self._mqtt.tls_insecure_set(True)
         self._mqtt.on_connect = self.__on_connect
         self._mqtt.on_connect_fail = self.__on_connect_failed

@@ -49,7 +49,7 @@ DOMAIN: str = 'intre_smart_home_control'
 DEFAULT_NAME: str = 'Intre Home Control'
 
 DEFAULT_NICK_NAME: str = 'Intretech'
-INTRE_HA_CONTROL_VERSION:int = 10
+INTRE_HA_CONTROL_VERSION:int = 11
 INTREHOME_HTTP_API_TIMEOUT: int = 30
 INTREHOME_MQTT_KEEPALIVE: int = 60
 # seconds, 3 days
@@ -79,7 +79,7 @@ MODULE_PRIORITY_DB:list=[
     'airConditioner',
     'floorHeating',
     'freshAir',  
-    'draperyCurtain',
+    'liftCurtain',
     'dualColorTemperatureLight',
     'singleColorTemperatureLight',
     'RGBWLight',
@@ -89,7 +89,7 @@ MODULE_PRIORITY_DB:list=[
 
 PRODUCT_KEY_DB:dict ={
     'switch':'Intre.HA-Switch',
-    'draperyCurtain':'Intre.HA-Curtain',
+    'liftCurtain':'Intre.HA-Curtain',
     'dualColorTemperatureLight':'Intre.HA-Light',
     'singleColorTemperatureLight':'Intre.HA-Light',
     'RGBWLight':'Intre.HA-Light',
