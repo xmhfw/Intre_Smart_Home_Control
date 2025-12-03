@@ -237,7 +237,15 @@ class IntreTempLight(IntreIoTModule):
         if newstate is None:
             _LOGGER.debug("Received None as newstate in _entity_state_notify")
             return
-        _LOGGER.debug(newstate)
+        
+        # 初始化缓存（如果不存在）
+        if not hasattr(self, '_state_cache'):
+            self._state_cache = {
+                'onOff': None,
+                'brightness': None,
+                'colorTemperature': None
+            }
+
         attributes = newstate.attributes
         brightness = attributes.get('brightness', 'N/A')
         color_temp = attributes.get('color_temp', 'N/A')
@@ -247,75 +255,137 @@ class IntreTempLight(IntreIoTModule):
             f"Brightness: {brightness}, Color Temp: {color_temp}"          
         )
 
-        #OnOff
-        self._onOff=StateUtils.util_get_state_onoff(newstate)
-        self._brightness=StateUtils.util_get_state_brightness(newstate)
-        # 改进：添加非空检查
-        if self._onOff is None:
-            _LOGGER.warning("self._onOff is None, cannot report onOff state")
-            return
+        # 处理开关状态
+        current_on_off = StateUtils.util_get_state_onoff(newstate)
+        if current_on_off is not None:
+            try:
+                on_off_str = str(int(current_on_off))
+                # 对比缓存，不同时才上报
+                if on_off_str != self._state_cache['onOff']:
+                    await self._intre_ss.report_prop_async(
+                        self._product.productKey,
+                        self._product.deviceId,
+                        self._module_key,
+                        'onOff',
+                        on_off_str
+                    )
+                    self._state_cache['onOff'] = on_off_str  # 更新缓存
+                    _LOGGER.debug(f"上报开关状态: {on_off_str}")
+                else:
+                    _LOGGER.debug("开关状态未变化，无需上报")
+            except (ValueError, TypeError) as e:
+                _LOGGER.error(f"转换开关状态失败 {current_on_off}: {str(e)}")
 
-        # 尝试安全转换
-        try:
-            on_off_str = str(int(self._onOff))
-            await self._intre_ss.report_prop_async(
-                self._product.productKey,
-                self._product.deviceId,
-                self._module_key,
-                'onOff',
-                on_off_str
-            )
-        except (ValueError, TypeError) as e:
-            _LOGGER.error(f"Failed to convert onOff value {self._onOff}: {str(e)}")
-        #await self._intre_ss.report_prop_async(self._product.productKey,self._product.deviceId,self._module_key,'onOff',str(int(self._onOff)))
-     
-        #brightness
-        if 'brightness' not in newstate.attributes:
-            _LOGGER.debug("Brightness key not found in state attributes.")
-            brightness_normalized = 0  # 设置默认值
-        else:
-            # 获取 brightness 值并检查类型
+        # 处理亮度
+        if 'brightness' in newstate.attributes:
             brightness_value = newstate.attributes['brightness']
-            if not isinstance(brightness_value, (int, float)):
-                _LOGGER.debug("Brightness value is not a number.")
-                brightness_normalized = 0  # 设置默认值
-            else:
+            if isinstance(brightness_value, (int, float)):
                 brightness_normalized = round(brightness_value / 2.55)
-                _LOGGER.debug(brightness_normalized)
-                # 调用报告属性方法
-                await self._intre_ss.report_prop_async(
-                    self._product.productKey,
-                    self._product.deviceId,
-                    self._module_key,
-                    'brightness',
-                    brightness_normalized
-                )
-        #await self._intre_ss.report_prop_async(self._product.productKey,self._product.deviceId,self._module_key,'brightness',int(newstate.attributes['brightness'] / 2.55))
-        #colorTemperature
-        color_temp_value = newstate.attributes.get('color_temp')
-        if color_temp_value is None:
-            _LOGGER.debug("Color temperature key not found in state attributes. Using default value of 5000K.")
-            color_temperature_normalized = 0
+                # 对比缓存，不同时才上报
+                if brightness_normalized != self._state_cache['brightness']:
+                    await self._intre_ss.report_prop_async(
+                        self._product.productKey,
+                        self._product.deviceId,
+                        self._module_key,
+                        'brightness',
+                        brightness_normalized
+                    )
+                    self._state_cache['brightness'] = brightness_normalized  # 更新缓存
+                    _LOGGER.debug(f"上报亮度: {brightness_normalized}")
+                else:
+                    _LOGGER.debug("亮度未变化，无需上报")
+            else:
+                _LOGGER.debug("亮度值不是数字，无法处理")
         else:
-            color_temperature_normalized = int((int(10 ** 6 / float(color_temp_value))) / 50) * 50
-            _LOGGER.debug(color_temperature_normalized)
-            # 调用报告属性方法
-            await self._intre_ss.report_prop_async(
-                self._product.productKey,
-                self._product.deviceId,
-                self._module_key,
-                'colorTemperature',
-                color_temperature_normalized
-            )
-        #await self._intre_ss.report_prop_async(self._product.productKey,self._product.deviceId,self._module_key,'colorTemperature',int((int(10 ** 6 /float(newstate.attributes['color_temp']))) / 50) * 50)
-        return                      
+            _LOGGER.debug("未找到亮度属性")
 
+        # 处理色温
+        color_temp_value = newstate.attributes.get('color_temp')
+        if color_temp_value is not None:
+            try:
+                color_temperature_normalized = int((int(10 **6 / float(color_temp_value))) / 50) * 50
+                # 对比缓存，不同时才上报
+                if color_temperature_normalized != self._state_cache['colorTemperature']:
+                    await self._intre_ss.report_prop_async(
+                        self._product.productKey,
+                        self._product.deviceId,
+                        self._module_key,
+                        'colorTemperature',
+                        color_temperature_normalized
+                    )
+                    self._state_cache['colorTemperature'] = color_temperature_normalized  # 更新缓存
+                    _LOGGER.debug(f"上报色温: {color_temperature_normalized}")
+                else:
+                    _LOGGER.debug("色温未变化，无需上报")
+            except (ValueError, TypeError) as e:
+                _LOGGER.error(f"转换色温失败 {color_temp_value}: {str(e)}")
+        else:
+            _LOGGER.debug("未找到色温属性")
+
+        return
+        
     def service_call_req(self, service_call_data: list) -> None:
         """处理服务调用请求，包括亮度和色温调节"""
         data = {'entity_id': self._entity_id}
         _LOGGER.debug(f"service_call_data: {service_call_data}")
         
         try:
+            # 1. 先获取嵌套在data里的module
+            module = service_call_data.get('data', {}).get('module', {})
+            if not module:
+                _LOGGER.warning("未从service_call_data中获取到有效的module信息")
+                return
+            
+            # 2. 从module中提取服务键和输入值
+            service_key = module.get('service', {}).get('serviceKey')
+            service_input_value = module.get('service', {}).get('serviceInputValue')
+
+            # 3. 解析service_input_value，判断是否包含brightness
+            is_brightness_request = False
+            input_data = None
+            if service_input_value:
+                if isinstance(service_input_value, bytes):
+                    service_input_value = service_input_value.decode('utf-8')
+                if isinstance(service_input_value, str):
+                    try:
+                        input_data = json.loads(service_input_value)
+                        # 核心判断：是否包含 'brightness' 字段
+                        if 'brightness' in input_data:
+                            is_brightness_request = True
+                            _LOGGER.debug("检测到亮度调节请求，准备进行时间戳校验")
+                    except json.JSONDecodeError as e:
+                        _LOGGER.error(f"解析serviceInputValue失败: {e}")
+
+            # 4. 仅对brightness请求执行时间戳对比
+            current_timestamp = None
+            if is_brightness_request:
+                current_timestamp = service_call_data.get('timestamp')
+                if not current_timestamp:
+                    _LOGGER.warning("亮度调节请求中未包含timestamp，无法进行校验，将执行请求")
+                else:
+                    try:
+                        current_timestamp = int(current_timestamp)
+                    except (ValueError, TypeError):
+                        _LOGGER.error(f"亮度调节请求的timestamp格式无效: {current_timestamp}，将执行请求")
+                        current_timestamp = None
+
+                    # 时间戳对比逻辑
+                    if current_timestamp is not None:
+                        # 初始化时间戳（如果不存在）
+                        if not hasattr(self, '_last_brightness_timestamp'):
+                            self._last_brightness_timestamp = 0
+                        
+                        if current_timestamp <= self._last_brightness_timestamp:
+                            _LOGGER.debug(
+                                f"亮度调节请求时间戳({current_timestamp})过期（上次：{self._last_brightness_timestamp}），丢弃该请求"
+                            )
+                            return  # 丢弃过期请求
+                        else:
+                            # 更新亮度请求的最新时间戳
+                            self._last_brightness_timestamp = current_timestamp
+                            _LOGGER.debug(f"更新亮度请求最新时间戳为: {current_timestamp}")
+
+            
             # 1. 先获取嵌套在data里的module（关键修复点）
             module = service_call_data.get('data', {}).get('module', {})
             if not module:  # 若未获取到module，直接返回避免后续报错
@@ -421,21 +491,45 @@ class IntreTempLight(IntreIoTModule):
             if 'brightness' in input_data:
                 brightness_data = input_data['brightness']
                 if isinstance(brightness_data, (int, float)) and 0 <= brightness_data <= 100:
-                    data['brightness'] = math.ceil(brightness_data * 2.55)
-                    self._intre_ss.call_ha_service('light', 'turn_on', data)
-                    _LOGGER.debug(f"亮度调节: 原始值={brightness_data}, 转换后={data['brightness']}")
+                    # 初始化上次亮度缓存（如果不存在）
+                    if not hasattr(self, '_brightness'):
+                        self._brightness = None
+                    
+                    # 计算转换后的亮度值（与实际发送的值保持一致）
+                    converted_brightness = math.ceil(brightness_data * 2.55)
+                    
+                    # 与上次亮度对比，不同时才发送指令
+                    if converted_brightness != self._brightness:
+                        data['brightness'] = converted_brightness
+                        self._intre_ss.call_ha_service('light', 'turn_on', data)
+                        # 更新缓存的上次亮度值
+                        self._brightness = converted_brightness
+                        _LOGGER.debug(f"亮度调节: 原始值={brightness_data}, 转换后={data['brightness']}")
+                    else:
+                        _LOGGER.debug(f"亮度值与上次相同({brightness_data})，无需重复发送指令")
                 else:
                     _LOGGER.error(f"无效的亮度值: {brightness_data},必须是0-100之间的数字")
             
             # 处理色温调节
             if 'colorTemperature' in input_data:
                 color_temp_data = input_data['colorTemperature']
+                # 检查数据类型和范围有效性
                 if isinstance(color_temp_data, (int, float)) and self._min_color_temp_kelvin <= color_temp_data <= self._max_color_temp_kelvin:
-                    data['color_temp'] = float(10**6 / color_temp_data)
-                    self._intre_ss.call_ha_service('light', 'turn_on', data)
-                    _LOGGER.debug(f"色温调节: 原始值={color_temp_data}K, 转换后={data['color_temp']}mired")
+                    # 初始化上次色温缓存（如果不存在）
+                    if not hasattr(self, '_colorTemperature'):
+                        self._colorTemperature = None
+                    _LOGGER.debug(f"新色温={color_temp_data}K, 旧色温={self._colorTemperature}K")
+                    # 与上次色温对比，不同时才发送指令
+                    if color_temp_data != self._colorTemperature:
+                        data['color_temp'] = float(10**6 / color_temp_data)
+                        self._intre_ss.call_ha_service('light', 'turn_on', data)
+                        # 更新缓存的上次色温值
+                        self._colorTemperature = color_temp_data
+                        _LOGGER.debug(f"色温调节: 原始值={color_temp_data}K, 转换后={data['color_temp']}mired")
+                    else:
+                        _LOGGER.debug(f"色温值与上次相同({color_temp_data}K)，无需重复发送指令")
                 else:
-                    _LOGGER.error(f"无效的色温值: {color_temp_data},必须是min-max之间的数字")
+                    _LOGGER.error(f"无效的色温值: {color_temp_data},必须是{self._min_color_temp_kelvin}-{self._max_color_temp_kelvin}之间的数字")
         
         except KeyError as e:
             _LOGGER.error(f"服务调用数据缺少必要的键: {e}")
@@ -449,136 +543,258 @@ class IntreTempLight(IntreIoTModule):
             'entity_id':self._entity_id
         }
         _LOGGER.debug(f"batch_service_prop_data: {batch_service_prop_data}")
-        for service_item in batch_service_prop_data['serviceList']:
-            # 1检查是否只有toggleOnOff参数    
-            if service_item['serviceKey']=='toggleOnOff':
-                service='turn_on'
-                if self._onOff==True:
-                    service='turn_off'
-                _LOGGER.debug("batch_service=%s %s",service,data)  
-                self._intre_ss.call_ha_service('light',service,data)
-                continue  # 执行完后结束当前服务项的处理 
-            if service_item['serviceKey'] == 'lightControlByBatchWithoutTransitionTime':
-                try:
-                    # 先将JSON字符串解析为字典
-                    input_values = json.loads(service_item['serviceInputValue'])
-                    _LOGGER.debug(f"len(input_values): {len(input_values)}")
-                except json.JSONDecodeError as e:
-                    _LOGGER.error(f"Failed to parse serviceInputValue: {e}")
-                    continue  # 解析失败则跳过当前服务
- 
-                # 2检查是否只有onOff参数
-                if len(input_values) == 1 and 'onOff' in input_values:
-                    _LOGGER.debug("Only onOff parameter provided")
-                    
-                    # 根据onOff值执行相应操作
-                    if input_values['onOff'] == 1:
-                        _LOGGER.debug("Calling service turn_on with basic data")
-                        self._intre_ss.call_ha_service('light', 'turn_on', data)
-                    else:
-                        _LOGGER.debug("Calling service turn_off with basic data")
-                        self._intre_ss.call_ha_service('light', 'turn_off', data)
-                    
-                    continue  # 执行完后结束当前服务项的处理  
-                # 情况3：同时包含onOff、colorTemperature 2个参数
-                required_keys = {'onOff', 'colorTemperature'}
-                if required_keys.issubset(input_values.keys()) and len(input_values) == 2:
-                    _LOGGER.debug("Found onOff, colorTemperature  - special handling")
-                    service = 'turn_on'
-                    
-                    if service == 'turn_on':
-                        # 处理色温
-                        try:
-                            kelvin_temp = input_values['colorTemperature']
-                            mired_value = 10**6 / float(kelvin_temp)
-                            data['color_temp'] = mired_value
-                            _LOGGER.debug(f"Converted {kelvin_temp}K to {data['color_temp']} mired")
-                        except (ZeroDivisionError, ValueError):
-                            _LOGGER.error(f"Invalid color temperature value: {kelvin_temp}")
+        try:
+            # 1. 先获取嵌套在data里的module
+            module = service_call_data.get('data', {}).get('module', {})
+            if not module:
+                _LOGGER.warning("未从service_call_data中获取到有效的module信息")
+                return
+            
+            # 2. 从module中提取服务键和输入值
+            service_key = module.get('service', {}).get('serviceKey')
+            service_input_value = module.get('service', {}).get('serviceInputValue')
+
+            # 3. 解析service_input_value，判断是否包含brightness
+            is_brightness_request = False
+            input_data = None
+            if service_input_value:
+                if isinstance(service_input_value, bytes):
+                    service_input_value = service_input_value.decode('utf-8')
+                if isinstance(service_input_value, str):
+                    try:
+                        input_data = json.loads(service_input_value)
+                        # 核心判断：是否包含 'brightness' 字段
+                        if 'brightness' in input_data:
+                            is_brightness_request = True
+                            _LOGGER.debug("检测到亮度调节请求，准备进行时间戳校验")
+                    except json.JSONDecodeError as e:
+                        _LOGGER.error(f"解析serviceInputValue失败: {e}")
+
+            # 4. 仅对brightness请求执行时间戳对比
+            current_timestamp = None
+            if is_brightness_request:
+                current_timestamp = service_call_data.get('timestamp')
+                if not current_timestamp:
+                    _LOGGER.warning("亮度调节请求中未包含timestamp，无法进行校验，将执行请求")
+                else:
+                    try:
+                        current_timestamp = int(current_timestamp)
+                    except (ValueError, TypeError):
+                        _LOGGER.error(f"亮度调节请求的timestamp格式无效: {current_timestamp}，将执行请求")
+                        current_timestamp = None
+
+                    # 时间戳对比逻辑
+                    if current_timestamp is not None:
+                        # 初始化时间戳（如果不存在）
+                        if not hasattr(self, '_last_brightness_timestamp'):
+                            self._last_brightness_timestamp = 0
                         
-                        # 处理亮度（保持不变）
-                        #data['brightness'] = int((input_values.get('brightness', 0) * 255)/100) if service == 'turn_on' else None
-                        #_LOGGER.debug(data['brightness'])
-                    _LOGGER.debug(f"Calling service {service} with special data: {data}")
-                    self._intre_ss.call_ha_service('light', service, data)
-                    continue   
-                
-                # 确定开关服务类型
-                service = 'turn_on' if input_values.get('onOff', 0) else 'turn_off'
-                
-                # 处理亮度（保持不变）  
-                brightness = int((input_values.get('brightness', 0) * 255)/100) if service == 'turn_on' else None
-                _LOGGER.debug(brightness)
-                _LOGGER.debug(input_values.get('brightness'))
-                # 处理色温（将开尔文转换为Mired值）
-                color_temp = None
-                if service == 'turn_on':
-                    kelvin_temp = input_values.get('colorTemperature')
-                    if kelvin_temp is not None:
-                        try:
-                            # 转换公式：Mired = 1,000,000 / 开尔文
-                            mired_value = 10**6 / float(kelvin_temp)
+                        if current_timestamp <= self._last_brightness_timestamp:
+                            _LOGGER.debug(
+                                f"亮度调节请求时间戳({current_timestamp})过期（上次：{self._last_brightness_timestamp}），丢弃该请求"
+                            )
+                            return  # 丢弃过期请求
+                        else:
+                            # 更新亮度请求的最新时间戳
+                            self._last_brightness_timestamp = current_timestamp
+                            _LOGGER.debug(f"更新亮度请求最新时间戳为: {current_timestamp}")
 
-                            color_temp = mired_value
+            
+
+            for service_item in batch_service_prop_data['serviceList']:
+                # 1检查是否只有toggleOnOff参数    
+                if service_item['serviceKey']=='toggleOnOff':
+                    service='turn_on'
+                    if self._onOff==True:
+                        service='turn_off'
+                    _LOGGER.debug("batch_service=%s %s",service,data)  
+                    self._intre_ss.call_ha_service('light',service,data)
+                    continue  # 执行完后结束当前服务项的处理 
+                if service_item['serviceKey'] == 'lightControlByBatchWithoutTransitionTime':
+                    try:
+                        # 先将JSON字符串解析为字典
+                        input_values = json.loads(service_item['serviceInputValue'])
+                        _LOGGER.debug(f"len(input_values): {len(input_values)}")
+                    except json.JSONDecodeError as e:
+                        _LOGGER.error(f"Failed to parse serviceInputValue: {e}")
+                        continue  # 解析失败则跳过当前服务
+    
+                    # 2检查是否只有onOff参数
+                    if len(input_values) == 1 and 'onOff' in input_values:
+                        _LOGGER.debug("Only onOff parameter provided")
+                        
+                        # 根据onOff值执行相应操作
+                        if input_values['onOff'] == 1:
+                            _LOGGER.debug("Calling service turn_on with basic data")
+                            self._intre_ss.call_ha_service('light', 'turn_on', data)
+                        else:
+                            _LOGGER.debug("Calling service turn_off with basic data")
+                            self._intre_ss.call_ha_service('light', 'turn_off', data)
+                        
+                        continue  # 执行完后结束当前服务项的处理  
+                    # 情况3：同时包含onOff、colorTemperature 2个参数
+                    required_keys = {'onOff', 'colorTemperature'}
+                    if required_keys.issubset(input_values.keys()) and len(input_values) == 2:
+                        _LOGGER.debug("Found onOff, colorTemperature  - special handling")
+                        service = 'turn_on'
+                        
+                        if service == 'turn_on':
+                            # 处理色温
+                            try:
+                                kelvin_temp = input_values['colorTemperature']
+                                mired_value = 10**6 / float(kelvin_temp)
+                                data['color_temp'] = mired_value
+                                _LOGGER.debug(f"Converted {kelvin_temp}K to {data['color_temp']} mired")
+                            except (ZeroDivisionError, ValueError):
+                                _LOGGER.error(f"Invalid color temperature value: {kelvin_temp}")
                             
-                            _LOGGER.debug(f"Converted {kelvin_temp}K to {color_temp} mired")
-                        except (ZeroDivisionError, ValueError):
-                            _LOGGER.error(f"Invalid color temperature value: {kelvin_temp}")
-                
-                # 构建服务数据
-                service_data = {
-                    'entity_id': self._entity_id,
-                    'brightness': brightness,
-                    'color_temp': color_temp,
-                }
-                
-                # 过滤掉None值
-                service_data = {k: v for k, v in service_data.items() if v is not None}
-                
-                _LOGGER.debug(f"Calling service {service} with data: {service_data}")
-                self._intre_ss.call_ha_service('light', service, service_data)
+                            # 处理亮度（保持不变）
+                            #data['brightness'] = int((input_values.get('brightness', 0) * 255)/100) if service == 'turn_on' else None
+                            #_LOGGER.debug(data['brightness'])
+                        _LOGGER.debug(f"Calling service {service} with special data: {data}")
+                        self._intre_ss.call_ha_service('light', service, data)
+                        continue   
+                    
+                    # 确定开关服务类型
+                    service = 'turn_on' if input_values.get('onOff', 0) else 'turn_off'
+                    
+                    # 处理亮度（保持不变）  
+                    brightness = int((input_values.get('brightness', 0) * 255)/100) if service == 'turn_on' else None
+                    _LOGGER.debug(brightness)
+                    _LOGGER.debug(input_values.get('brightness'))
+                    # 处理色温（将开尔文转换为Mired值）
+                    color_temp = None
+                    if service == 'turn_on':
+                        kelvin_temp = input_values.get('colorTemperature')
+                        if kelvin_temp is not None:
+                            try:
+                                # 转换公式：Mired = 1,000,000 / 开尔文
+                                mired_value = 10**6 / float(kelvin_temp)
 
+                                color_temp = mired_value
+                                
+                                _LOGGER.debug(f"Converted {kelvin_temp}K to {color_temp} mired")
+                            except (ZeroDivisionError, ValueError):
+                                _LOGGER.error(f"Invalid color temperature value: {kelvin_temp}")
+                    
+                    # 构建服务数据
+                    service_data = {
+                        'entity_id': self._entity_id,
+                        'brightness': brightness,
+                        'color_temp': color_temp,
+                    }
+                    
+                    # 过滤掉None值
+                    service_data = {k: v for k, v in service_data.items() if v is not None}
+                    
+                    _LOGGER.debug(f"Calling service {service} with data: {service_data}")
+                    self._intre_ss.call_ha_service('light', service, service_data)
+        except KeyError as e:
+            _LOGGER.error(f"批量服务数据缺少必要的键: {e}")
+        except Exception as e:
+            _LOGGER.error(f"处理批量服务请求时发生错误: {e}")  
 
-        '''
-        for prop in batch_service_prop_data['propertyList']:
-            if prop['propertyKey']=='onOff':
-                service='turn_on'
-                if prop['propertyValue']=='0':
-                    service='turn_off'
-                _LOGGER.debug("batch1_service=%s %s",service,data)  
-                self._intre_ss.call_ha_service('switch',service,data)
-        
-
-        '''
-    def attr_change_req(self, properlist: list,msg_id: str) -> None:
+    def attr_change_req(self, properlist: list, msg_id: str) -> None:
         _LOGGER.debug(f"properlist: {properlist}")
-        
-        data={
-            'entity_id':self._entity_id
-        }
-        service='turn_on'
-        for prop in properlist:
-            prop_key = prop.get('propertyKey')
-            prop_value = prop.get('propertyValue')
-            if prop['propertyKey']=='onOff':
-                if prop['propertyValue']=='0':
-                    service='turn_off'
-                _LOGGER.debug("onOffservice=%s %s",service,data)  
-                self._intre_ss.call_ha_service('light',service,data)
-            elif prop.get('propertyKey') == 'brightness':
-                brightness = int(prop_value)
-                if 0 <= brightness <= 100:
-                    data['brightness'] = int((brightness * 255)/100)    
-                _LOGGER.debug("bright service=%d ",data)  
-                self._intre_ss.call_ha_service('light',service,data)
-            elif prop.get('propertyKey') == 'colorTemperature':
-                kelvin = int(prop_value)
-                if self._min_color_temp_kelvin <= kelvin <= self._max_color_temp_kelvin:  # 常见色温范围
-                    mired = int(10**6 / kelvin)
-                    data['color_temp'] = mired
-                _LOGGER.debug("colorTemperature service=%d ",data)  
-                self._intre_ss.call_ha_service('light',service,data)    
-        return
+        try:
+            # 从列表中提取时间戳（适配实际数据结构）
+            # 1. 检查列表是否为空
+            if not properlist:
+                _LOGGER.warning("properlist为空，无法处理属性变更请求")
+                return
+            
+            # 2. 从列表的第一个元素中获取timestamp（根据实际数据确定）
+            first_item = properlist[0]
+            current_timestamp = first_item.get('timestamp')
+            if not current_timestamp:
+                _LOGGER.warning("属性变更数据的第一个元素中未包含timestamp，无法进行时间戳校验")
+                return
+            
+            # 3. 转换为整数便于比较
+            try:
+                current_timestamp = int(current_timestamp)
+            except (ValueError, TypeError):
+                _LOGGER.error(f"无效的timestamp格式: {current_timestamp}，应为整数")
+                return
+            
+            # 4. 时间戳校验（与上次请求比较）
+            if hasattr(self, '_last_service_timestamp'):
+                if current_timestamp <= self._last_service_timestamp:
+                    _LOGGER.debug(
+                        f"当前时间戳({current_timestamp})小于等于上次时间戳({self._last_service_timestamp})，丢弃该请求"
+                    )
+                    return
+            
+            # 5. 更新最后一次请求的时间戳
+            self._last_brightness_timestamp = current_timestamp
+
+            # 处理属性变更逻辑
+            data = {'entity_id': self._entity_id}
+            service = 'turn_on'  # 默认开灯光服务
+
+            for prop in properlist:
+                prop_key = prop.get('propertyKey')
+                prop_value = prop.get('propertyValue')
+
+                if not prop_key or prop_value is None:
+                    _LOGGER.warning(f"属性数据不完整: {prop}，跳过处理")
+                    continue
+
+                # 处理开关状态
+                if prop_key == 'onOff':
+                    if prop_value == '0':
+                        service = 'turn_off'
+                        _LOGGER.debug("收到关灯指令")
+                    else:
+                        service = 'turn_on'
+                        _LOGGER.debug("收到开灯指令")
+                    self._intre_ss.call_ha_service('light', service, data)
+
+                # 处理亮度调节
+                elif prop_key == 'brightness':
+                    try:
+                        brightness = int(prop_value)
+                        if 0 <= brightness <= 100:
+                            # 转换为Home Assistant的亮度范围（0-255）
+                            data['brightness'] = int((brightness * 255) / 100)
+                            self._intre_ss.call_ha_service('light', 'turn_on', data)
+                            _LOGGER.debug(f"亮度调节至: {brightness}% (转换后: {data['brightness']})")
+                        else:
+                            _LOGGER.error(f"亮度值超出范围(0-100): {brightness}")
+                    except (ValueError, TypeError):
+                        _LOGGER.error(f"无效的亮度值: {prop_value}，应为整数")
+
+                # 处理色温调节
+                elif prop_key == 'colorTemperature':
+                    try:
+                        kelvin = int(prop_value)
+                        # 检查设备是否定义了色温范围
+                        if not (hasattr(self, '_min_color_temp_kelvin') and hasattr(self, '_max_color_temp_kelvin')):
+                            _LOGGER.warning("设备未定义色温范围，无法调节色温")
+                            continue
+                        # 检查色温是否在有效范围内
+                        if self._min_color_temp_kelvin <= kelvin <= self._max_color_temp_kelvin:
+                            # 转换为Mired值（Home Assistant使用）
+                            data['color_temp'] = int(10**6 / kelvin)
+                            self._intre_ss.call_ha_service('light', 'turn_on', data)
+                            _LOGGER.debug(f"色温调节至: {kelvin}K (转换后: {data['color_temp']} mired)")
+                        else:
+                            _LOGGER.error(
+                                f"色温值超出设备范围({self._min_color_temp_kelvin}-{self._max_color_temp_kelvin}K): {kelvin}"
+                            )
+                    except (ValueError, TypeError):
+                        _LOGGER.error(f"无效的色温值: {prop_value}，应为整数")
+
+                # 处理未知属性
+                else:
+                    _LOGGER.debug(f"忽略未知属性: {prop_key}")
+
+        except IndexError:
+            _LOGGER.error("properlist索引错误，可能列表为空或元素不存在")
+        except KeyError as e:
+            _LOGGER.error(f"属性数据缺少必要的键: {e}")
+        except Exception as e:
+            _LOGGER.error(f"处理属性变更请求时发生错误: {e}")
 
 async def test_fun()->bool:
     _LOGGER.debug("test-light")  

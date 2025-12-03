@@ -49,7 +49,7 @@ DOMAIN: str = 'intre_smart_home_control'
 DEFAULT_NAME: str = 'Intre Home Control'
 
 DEFAULT_NICK_NAME: str = 'Intretech'
-INTRE_HA_CONTROL_VERSION:int = 11
+INTRE_HA_CONTROL_VERSION:int = 12
 INTREHOME_HTTP_API_TIMEOUT: int = 30
 INTREHOME_MQTT_KEEPALIVE: int = 60
 # seconds, 3 days
@@ -100,6 +100,7 @@ SUPPORTED_PLATFORMS: list = [
     'switch',
     'cover',
     'light',
+    'vacuum',
 ]
 
 DEFAULT_CLOUD_SERVER: str = 'cn'

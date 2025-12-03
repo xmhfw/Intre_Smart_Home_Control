@@ -527,7 +527,7 @@ class  IntreManagementEngine():
         
             config_data = {'_hadevices': _hadevices}
             self._hass.data[DOMAIN]['config_data'] = config_data
-            await notify_async_forward_entry_setups(hass=self._hass,config_entry=self._config_entry,async_add_entities=None,moudle_list=['switch','curtain','singleColorTemperatureLight','dualColorTemperatureLight','RGBWLight','RGBCWLight'])
+            await notify_async_forward_entry_setups(hass=self._hass,config_entry=self._config_entry,async_add_entities=None,moudle_list=['switch','curtain','singleColorTemperatureLight','dualColorTemperatureLight','RGBWLight','RGBCWLight','vacuum'])
             _LOGGER.debug(f"当前_hadevices数量: {len(_hadevices)}")  # 关键：检查长度
             for hadevice in _hadevices:
                 _LOGGER.debug('hadevice111111111111111111')

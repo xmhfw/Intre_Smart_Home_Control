@@ -8,6 +8,6 @@
     "qrcode>=8.1"
   ],
   "documentation": "https://github.com/home-assistant/example-custom-config/tree/master/custom_components/example_light/",
-  "version": "0.0.7",
+  "version": "0.0.12",
   "codeowners": ["@W"]
 }
