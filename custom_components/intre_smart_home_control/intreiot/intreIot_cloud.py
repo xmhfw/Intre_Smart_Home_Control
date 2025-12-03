@@ -288,7 +288,8 @@ class IntreIotHttpClient:
 
     async def get_mqtt_info(self,deviceSn:str)->dict:
         body={
-            "deviceSn": deviceSn
+            "deviceSn": deviceSn,
+            "ipAddress": self._lanip
         }
         rsp = await self.__intrehome_api_post_async(
             url_path='/device/v1/device/mqtt-connect-info/get',

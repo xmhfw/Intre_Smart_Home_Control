@@ -50,6 +50,7 @@ import time
 import logging
 import hmac
 import hashlib
+import uuid
 from .const import (MQTT_MSG_CODE_TEXT,MQTT_ToH,INTRE_SECURE_KEY)
 _LOGGER = logging.getLogger(__name__)
 
@@ -150,13 +151,14 @@ def MQTT_DEVICE_DOWN_TLS_LOG_REPORT(token,productkey:str,deviceid:str):
 
 def MQTT_PROPERTY_REPORT(token,productkey:str,deviceid:str, modulekey:str,propkey:str,prop_value:str):
     timestamp_ms = str(int(time.time() * 1000))
+    msg_id = str(uuid.uuid4())  # 生成msgId并暂存
     mqtt_message =  {
         "topic":'device/'+productkey+'/'+deviceid+'/up/tls/property/report',
         "payload": {
             "token": token,
-            "msgId": "1",
+            "msgId":msg_id,  
             "timestamp": timestamp_ms,
-            "sign":__calculate_checksum(MQTT_ToH+'device/'+productkey+'/'+deviceid+'/up/tls/property/report',timestamp_ms,'1',token),
+            "sign":__calculate_checksum(MQTT_ToH+'device/'+productkey+'/'+deviceid+'/up/tls/property/report',timestamp_ms,msg_id,token),
             "data": {
                 "deviceModuleList": [
                 {

@@ -527,11 +527,22 @@ class  IntreManagementEngine():
         
             config_data = {'_hadevices': _hadevices}
             self._hass.data[DOMAIN]['config_data'] = config_data
-            await notify_async_forward_entry_setups(hass=self._hass,config_entry=self._config_entry,async_add_entities=None,moudle_list=['switch','curtain','singleColorTemperatureLight','dualColorTemperatureLight','RGBWLight','RGBCWLight'])
+            await notify_async_forward_entry_setups(hass=self._hass,config_entry=self._config_entry,async_add_entities=None,moudle_list=['switch','curtain','singleColorTemperatureLight','dualColorTemperatureLight','RGBWLight','RGBCWLight','vacuum'])
             _LOGGER.debug(f"当前_hadevices数量: {len(_hadevices)}")  # 关键：检查长度
             for hadevice in _hadevices:
                 _LOGGER.debug('hadevice111111111111111111')
                 _LOGGER.debug(hadevice)
+
+                # 检查设备下是否有任何实体被禁用（disabled_by 不为 None）
+                has_disabled_entity = any(
+                    entity['entry'].disabled_by is not None 
+                    for entity in hadevice['entitys']
+                )
+                
+                # 如果存在被禁用的实体，则跳过后续操作
+                if has_disabled_entity:
+                    _LOGGER.debug(f"设备 {hadevice['product'].deviceSn} 包含被禁用的实体，跳过处理")
+                    continue
                 product = hadevice['product']
                 product.set_parent_device_id(self._intreIot_client._device_id)
                 productkey = self.get_productKey_by_modules(product.get_modules())

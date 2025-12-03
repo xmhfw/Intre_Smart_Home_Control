@@ -158,6 +158,57 @@ async def async_initialize_core(hass: HomeAssistant, config_entry: ConfigEntry):
 async def async_setup_entry(
     hass: HomeAssistant, config_entry: ConfigEntry
 ) -> bool:
+    '''
+    # 新增 
+    entity_ids=[]
+    dr = device_registry.async_get(hass)
+    er = entity_registry.async_get(hass)
+    # 遍历所有设备
+    for device in dr.devices.values():
+        _LOGGER.debug(f"设备ID: {device.id}")
+        _LOGGER.debug(f"名称: {device.name or '无名设备'}")
+        _LOGGER.debug(f"制造商: {device.manufacturer}")
+        _LOGGER.debug(f"型号: {device.model}")
+        _LOGGER.debug(f"软件版本: {device.sw_version}")
+        _LOGGER.debug(f"硬件版本: {device.hw_version}")
+        _LOGGER.debug(f"连接信息: {device.connections}")
+        _LOGGER.debug(f"唯一标识符: {device.identifiers}")
+        _LOGGER.debug(f"所属区域ID: {device.area_id}")
+        _LOGGER.debug(f"配置URL: {device.configuration_url}")
+        
+        er = entity_registry.async_get(hass)
+        for entry in er.entities.values():
+            if entry.device_id == device.id:
+                entity_ids.append(entry.entity_id)
+                _LOGGER.debug(f"- 实体ID: {entry.entity_id}")
+                _LOGGER.debug(f" 友好名称: {entry.name}")
+                _LOGGER.debug(f" 平台: {entry.platform}")
+                _LOGGER.debug(f" 唯一ID: {entry.unique_id}")
+                _LOGGER.debug(f" 图标: {entry.icon}")
+                _LOGGER.debug(f" 设备ID: {entry.device_id}")
+                _LOGGER.debug(f" 区域ID: {entry.area_id}")
+                _LOGGER.debug(f" 禁用原因: {entry.disabled_by}")
+                _LOGGER.debug(f" 隐藏原因: {entry.hidden_by}")
+                _LOGGER.debug(f" 能力: {entry.capabilities}")
+                _LOGGER.debug(f" 支持功能: {entry.supported_features}")
+                _LOGGER.debug(f" 测量单位: {entry.unit_of_measurement}")
+                _LOGGER.debug(f" 原始名称: {entry.original_name}")
+                _LOGGER.debug(f" 原始图标: {entry.original_icon}")
+                _LOGGER.debug(f" 配置项ID: {entry.config_entry_id}")
+                _LOGGER.debug(f" 选项: {entry.options}")
+                _LOGGER.debug(f" 翻译键: {entry.translation_key}")
+                _LOGGER.debug(f" 是否有实体名称: {entry.has_entity_name}")
+                _LOGGER.debug("-" * 40)
+        _LOGGER.debug("-" * 40)
+
+    # 开始监听
+    unsub = async_track_state_change_event(
+        hass,  # Home Assistant 实例
+        entity_ids,  # 要监听的实体列表
+        state_changed_callback,  # 回调函数
+    )
+    # 新增
+    ''' 
     """首次设置配置项（仅执行一次）"""
     # 调用核心初始化逻辑
     return await async_initialize_core(hass, config_entry)

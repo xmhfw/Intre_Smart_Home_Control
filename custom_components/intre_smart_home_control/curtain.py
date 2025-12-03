@@ -42,7 +42,7 @@ async def async_setup_entry(
                 #_LOGGER.debug(state)
                 #if entity['entry'].supported_features & 7:
                 module_info={}
-                module_info['moduleCode']='draperyCurtain'
+                module_info['moduleCode']='liftCurtain'
                 module_info['moduleKey']=entity['entry'].entity_id
                 module_info['moduleName']= entity['entry'].name
                 module_info['entity_id']= entity['entry'].entity_id
@@ -117,7 +117,7 @@ class IntreCover(IntreIoTModule):
             instance_module_name = s.split("curtain.")[1]
         else:
             instance_module_name = "窗帘"  # 或者根据需要设置默认值
-        _LOGGER.debug(f'instance_module_name={instance_module_name}')
+        _LOGGER.debug(f'curtaininstance_module_name={instance_module_name}')
         return {
             "templateModuleKey":'liftCurtain_2',
             "instanceModuleKey": self._module_key,
@@ -253,7 +253,7 @@ class IntreCover(IntreIoTModule):
 
                 # 使用Home Assistant的事件循环（关键优化）
                 # 避免手动创建/关闭循环，防止与HA主循环冲突
-                loop = self._intre_ss.hass.loop  # 假设_intre_ss持有hass实例
+                loop = self._intre_ss._hass.loop  # 假设_intre_ss持有hass实例
                 for coro in coroutines:
                     loop.create_task(coro)  # 加入HA的循环，自动处理
 
